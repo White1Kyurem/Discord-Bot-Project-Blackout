@@ -1,0 +1,16 @@
+{
+  "name": "discord-trello-ticket-bot",
+  "version": "2.0.0",
+  "description": "Discord bot with ticket-style button panel and modal that creates Trello cards",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node index.js",
+    "deploy": "node deploy-commands.js"
+  },
+  "dependencies": {
+    "axios": "^1.8.4",
+    "discord.js": "^14.19.3",
+    "dotenv": "^16.4.7"
+  }
+}
