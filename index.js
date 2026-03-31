@@ -307,8 +307,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
 
       await interaction.editReply({
-        content: 'Your suggestion has been submitted successfully.',
-      });
+  content:
+    'Your suggestion has been submitted successfully.\n' +
+    `View it here: ${card.shortUrl}`,
+});
     }
   } catch (error) {
     console.error('Interaction error:', error);
