@@ -78,7 +78,7 @@ async function getBoardLists() {
       params: {
         key: TRELLO_KEY,
         token: TRELLO_TOKEN,
-        fields: 'name,id,closed,pos',
+        fields: 'name,id,closed',
         filter: 'open',
       },
     }
@@ -90,18 +90,24 @@ async function getBoardLists() {
 async function findTargetListId() {
   const lists = await getBoardLists();
 
-  const exactMatch = lists.find(
+  const match = lists.find(
     (list) =>
-      list.name.trim().toLowerCase() ===
-      TRELLO_TARGET_LIST_NAME.trim().toLowerCase()
+      typeof list.name === 'string' &&
+      list.name.trim().toLowerCase() === TRELLO_TARGET_LIST_NAME.trim().toLowerCase()
   );
 
-  if (exactMatch) return exactMatch.id;
+  if (match) return match.id;
 
   const availableLists = lists.map((list) => `"${list.name}"`).join(', ');
   throw new Error(
     `Trello list "${TRELLO_TARGET_LIST_NAME}" was not found. Available lists: ${availableLists}`
   );
+}
+
+function sanitizeInput(value, fallback = '') {
+  if (typeof value !== 'string') return fallback;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : fallback;
 }
 
 async function createTrelloCard({
@@ -114,24 +120,29 @@ async function createTrelloCard({
 }) {
   const targetListId = await findTargetListId();
 
+  const safeTitle = sanitizeInput(title, 'Untitled Suggestion');
+  const safeCategory = sanitizeInput(category, 'None');
+  const safeDescription = sanitizeInput(description, 'No description provided.');
+  const safeUserTag = sanitizeInput(discordUserTag, 'Unknown User');
+  const safeUserId = sanitizeInput(String(discordUserId || ''), 'Unknown ID');
+  const safeGuildName = sanitizeInput(guildName, 'Unknown Server');
+
   const cardDescription = [
-    `Submitted by: ${discordUserTag}`,
-    `Discord User ID: ${discordUserId}`,
-    guildName ? `Discord Server: ${guildName}` : null,
-    category ? `Category: ${category}` : null,
+    `Submitted by: ${safeUserTag}`,
+    `Discord User ID: ${safeUserId}`,
+    `Discord Server: ${safeGuildName}`,
+    `Category: ${safeCategory}`,
     '',
     'Suggestion:',
-    description,
-  ]
-    .filter(Boolean)
-    .join('\n');
+    safeDescription,
+  ].join('\n');
 
   const response = await axios.post('https://api.trello.com/1/cards', null, {
     params: {
       key: TRELLO_KEY,
       token: TRELLO_TOKEN,
       idList: targetListId,
-      name: title,
+      name: safeTitle,
       desc: cardDescription,
       pos: 'top',
     },
@@ -200,7 +211,7 @@ function buildPanelMessage() {
     .setTitle('Suggestion System')
     .setDescription(
       'Click the button below to submit a suggestion for the server.\n\n' +
-        'A form will open directly in Discord where you can enter your idea. Once submitted, it will automatically be sent to our Trello board.'
+      'A form will open directly in Discord where you can enter your idea. Once submitted, it will automatically be sent to our Trello board.'
     );
 
   const row = new ActionRowBuilder().addComponents(
@@ -267,13 +278,20 @@ client.on(Events.InteractionCreate, async (interaction) => {
     ) {
       await interaction.deferReply({ ephemeral: true });
 
-      const title = interaction.fields.getTextInputValue('suggestion_title').trim();
-      const category = interaction.fields
-        .getTextInputValue('suggestion_category')
-        .trim();
-      const description = interaction.fields
-        .getTextInputValue('suggestion_description')
-        .trim();
+      const title = sanitizeInput(
+        interaction.fields.getTextInputValue('suggestion_title'),
+        'Untitled Suggestion'
+      );
+
+      const category = sanitizeInput(
+        interaction.fields.getTextInputValue('suggestion_category'),
+        'None'
+      );
+
+      const description = sanitizeInput(
+        interaction.fields.getTextInputValue('suggestion_description'),
+        'No description provided.'
+      );
 
       await createTrelloCard({
         title,
@@ -297,12 +315,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
   } catch (error) {
     console.error('Interaction error:', error);
 
-    const message = `An error occurred while processing your request:\n\`${error.message}\``;
+    const errorMessage = error?.message
+      ? `An error occurred while processing your request:\n\`${error.message}\``
+      : 'An unknown error occurred while processing your request.';
 
     if (interaction.deferred || interaction.replied) {
-      await interaction.editReply({ content: message }).catch(() => {});
+      await interaction.editReply({ content: errorMessage }).catch(() => {});
     } else {
-      await interaction.reply({ content: message, ephemeral: true }).catch(() => {});
+      await interaction.reply({ content: errorMessage, ephemeral: true }).catch(() => {});
     }
   }
 });
