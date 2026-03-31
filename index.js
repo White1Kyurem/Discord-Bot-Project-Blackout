@@ -50,6 +50,12 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds],
 });
 
+function sanitizeInput(value, fallback = '') {
+  if (typeof value !== 'string') return fallback;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : fallback;
+}
+
 async function registerGuildCommands() {
   const rest = new REST({ version: '10' }).setToken(DISCORD_TOKEN);
 
@@ -102,12 +108,6 @@ async function findTargetListId() {
   throw new Error(
     `Trello list "${TRELLO_TARGET_LIST_NAME}" was not found. Available lists: ${availableLists}`
   );
-}
-
-function sanitizeInput(value, fallback = '') {
-  if (typeof value !== 'string') return fallback;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : fallback;
 }
 
 async function createTrelloCard({
@@ -176,7 +176,7 @@ function buildSuggestionModal() {
     .setRequired(true)
     .setMinLength(3)
     .setMaxLength(100)
-    .setPlaceholder('e.g. Add a new mod / Adjust hacked crate loot / Add a new event');
+    .setPlaceholder('e.g. New mod or crate loot change');
 
   const categoryInput = new TextInputBuilder()
     .setCustomId('suggestion_category')
@@ -184,7 +184,7 @@ function buildSuggestionModal() {
     .setStyle(TextInputStyle.Short)
     .setRequired(false)
     .setMaxLength(50)
-    .setPlaceholder('e.g. Mod, Loot, Event, Balance, QoL');
+    .setPlaceholder('e.g. Mod, Loot, Event');
 
   const descriptionInput = new TextInputBuilder()
     .setCustomId('suggestion_description')
@@ -193,9 +193,7 @@ function buildSuggestionModal() {
     .setRequired(true)
     .setMinLength(10)
     .setMaxLength(1500)
-    .setPlaceholder(
-      'Explain your suggestion in detail, for example what should be changed or added and why it would improve the server.'
-    );
+    .setPlaceholder('Explain what should change and why.');
 
   modal.addComponents(
     new ActionRowBuilder().addComponents(titleInput),
@@ -211,7 +209,7 @@ function buildPanelMessage() {
     .setTitle('Suggestion System')
     .setDescription(
       'Click the button below to submit a suggestion for the server.\n\n' +
-      'A form will open directly in Discord where you can enter your idea. Once submitted, it will automatically be sent to our Trello board.'
+      'A form will open in Discord and your suggestion will be sent to Trello.'
     );
 
   const row = new ActionRowBuilder().addComponents(
