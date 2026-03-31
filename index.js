@@ -230,14 +230,34 @@ client.on(Events.InteractionCreate, async (i) => {
 // Welcome system
 client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
   try {
-    if (!VERIFIED_ROLE_ID || !WELCOME_CHANNEL_ID) return;
+    console.log('GuildMemberUpdate ausgelöst für:', newMember.user.tag);
+
+    if (!VERIFIED_ROLE_ID || !WELCOME_CHANNEL_ID) {
+      console.log('FEHLER: VERIFIED_ROLE_ID oder WELCOME_CHANNEL_ID fehlt');
+      return;
+    }
 
     const hadRole = oldMember.roles.cache.has(VERIFIED_ROLE_ID);
     const hasRoleNow = newMember.roles.cache.has(VERIFIED_ROLE_ID);
 
+    console.log('Rolle vorher:', hadRole);
+    console.log('Rolle nachher:', hasRoleNow);
+
     if (!hadRole && hasRoleNow) {
+      console.log('Verifizierungsrolle wurde neu vergeben');
+
       const channel = await newMember.guild.channels.fetch(WELCOME_CHANNEL_ID);
-      if (!channel || !channel.isTextBased()) return;
+      console.log('Channel gefunden:', !!channel);
+
+      if (!channel) {
+        console.log('FEHLER: Welcome-Channel nicht gefunden');
+        return;
+      }
+
+      if (!channel.isTextBased()) {
+        console.log('FEHLER: Channel ist nicht textbasiert');
+        return;
+      }
 
       const embed = new EmbedBuilder()
         .setColor(0x0f0f0f)
@@ -255,6 +275,9 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
         .setTimestamp();
 
       await channel.send({ embeds: [embed] });
+      console.log('Welcome-Nachricht erfolgreich gesendet');
+    } else {
+      console.log('Keine neue Verifizierungsrolle erkannt');
     }
   } catch (err) {
     console.error('Welcome error:', err);
