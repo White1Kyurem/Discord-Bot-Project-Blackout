@@ -33,6 +33,7 @@ const {
   VERIFIED_ROLE_ID,
   STATUS_CHANNEL_ID,
   CFTOOLS_API_TOKEN,
+  CFTOOLS_APPLICATION_ID,
   CFTOOLS_SERVER_ID,
   RESTART_TIMES = '00:00,04:00,08:00,12:00,16:00,20:00',
   TIMEZONE = 'Europe/Zurich',
@@ -49,6 +50,13 @@ const SUGGESTION_MODAL_ID = 'suggestion_modal';
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+}
+
+function ensureStatusStateFile() {
+  ensureDataDir();
+  if (!fs.existsSync(STATUS_STATE_FILE)) {
+    fs.writeFileSync(STATUS_STATE_FILE, '{}', 'utf8');
   }
 }
 
@@ -290,7 +298,7 @@ function getNextRestartText() {
 }
 
 async function fetchCFToolsServerStatus() {
-  if (!CFTOOLS_API_TOKEN || !CFTOOLS_SERVER_ID) {
+  if (!CFTOOLS_API_TOKEN || !CFTOOLS_SERVER_ID || !CFTOOLS_APPLICATION_ID) {
     return { ok: false, error: 'Missing CFTools configuration' };
   }
 
@@ -300,6 +308,7 @@ async function fetchCFToolsServerStatus() {
       {
         headers: {
           Authorization: `Bearer ${CFTOOLS_API_TOKEN}`,
+          'User-Agent': CFTOOLS_APPLICATION_ID,
           'Content-Type': 'application/json',
         },
         timeout: 15000,
@@ -308,6 +317,8 @@ async function fetchCFToolsServerStatus() {
 
     return { ok: true, payload: response.data };
   } catch (error) {
+    console.error('CFTools error response:', error.response?.data || error.message);
+
     const message =
       error.response?.data?.message ||
       error.response?.data?.error ||
@@ -486,6 +497,8 @@ function getMissingChannelPermissions(channel, me) {
 
 client.once(Events.ClientReady, async () => {
   console.log('Bot online');
+
+  ensureStatusStateFile();
 
   try {
     await refreshStatusPanel();
