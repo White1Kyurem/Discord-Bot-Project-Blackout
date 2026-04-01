@@ -15,6 +15,7 @@ const {
   ButtonStyle,
   EmbedBuilder,
   InteractionType,
+  PermissionsBitField,
 } = require('discord.js');
 
 const client = new Client({
@@ -41,11 +42,14 @@ const {
 
 const DATA_DIR = path.join(__dirname, 'data');
 const STATUS_STATE_FILE = path.join(DATA_DIR, 'status-panel.json');
+
 const PANEL_BUTTON_ID = 'open_suggestion_modal';
 const SUGGESTION_MODAL_ID = 'suggestion_modal';
 
 function ensureDataDir() {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
 }
 
 function safe(value, fallback = '') {
@@ -54,7 +58,7 @@ function safe(value, fallback = '') {
   return trimmed.length ? trimmed : fallback;
 }
 
-function getJsonFile(filePath, fallback) {
+function readJsonFile(filePath, fallback) {
   try {
     if (!fs.existsSync(filePath)) return fallback;
     return JSON.parse(fs.readFileSync(filePath, 'utf8'));
@@ -64,13 +68,40 @@ function getJsonFile(filePath, fallback) {
   }
 }
 
-function setJsonFile(filePath, value) {
+function writeJsonFile(filePath, data) {
   try {
     ensureDataDir();
-    fs.writeFileSync(filePath, JSON.stringify(value, null, 2), 'utf8');
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
   } catch (error) {
     console.error(`Failed to write ${filePath}:`, error);
   }
+}
+
+function getStatusPanelState() {
+  return readJsonFile(STATUS_STATE_FILE, {});
+}
+
+function setStatusPanelState(state) {
+  writeJsonFile(STATUS_STATE_FILE, state);
+}
+
+function buildSuggestionPanel() {
+  const embed = new EmbedBuilder()
+    .setColor(0x111111)
+    .setTitle('Suggestion System')
+    .setDescription(
+      'Click the button below to submit a suggestion.\n\nYour suggestion will be sent to our Trello board.'
+    );
+
+  const button = new ButtonBuilder()
+    .setCustomId(PANEL_BUTTON_ID)
+    .setLabel('Submit Suggestion')
+    .setStyle(ButtonStyle.Primary);
+
+  return {
+    embeds: [embed],
+    components: [new ActionRowBuilder().addComponents(button)],
+  };
 }
 
 function buildSuggestionModal() {
@@ -111,30 +142,17 @@ function buildSuggestionModal() {
   return modal;
 }
 
-function buildSuggestionPanel() {
-  const embed = new EmbedBuilder()
-    .setColor(0x111111)
-    .setTitle('Suggestion System')
-    .setDescription(
-      'Click the button below to submit a suggestion.\n\nYour suggestion will be sent to our Trello board.'
-    );
-
-  const button = new ButtonBuilder()
-    .setCustomId(PANEL_BUTTON_ID)
-    .setLabel('Submit Suggestion')
-    .setStyle(ButtonStyle.Primary);
-
-  return {
-    embeds: [embed],
-    components: [new ActionRowBuilder().addComponents(button)],
-  };
-}
-
 async function findTrelloListId() {
-  const response = await axios.get(`https://api.trello.com/1/boards/${TRELLO_BOARD_SHORTLINK}/lists`, {
-    params: { key: TRELLO_KEY, token: TRELLO_TOKEN },
-    timeout: 15000,
-  });
+  const response = await axios.get(
+    `https://api.trello.com/1/boards/${TRELLO_BOARD_SHORTLINK}/lists`,
+    {
+      params: {
+        key: TRELLO_KEY,
+        token: TRELLO_TOKEN,
+      },
+      timeout: 15000,
+    }
+  );
 
   const list = response.data.find(
     (item) => item.name.toLowerCase() === TRELLO_TARGET_LIST_NAME.toLowerCase()
@@ -201,8 +219,10 @@ function parseRestartTimes() {
     .map((entry) => {
       const match = /^(\d{1,2}):(\d{2})$/.exec(entry);
       if (!match) return null;
+
       const hours = Number(match[1]);
       const minutes = Number(match[2]);
+
       if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
       return { hours, minutes };
     })
@@ -223,6 +243,7 @@ function getLocalDateParts(date, timeZone) {
 
   const parts = formatter.formatToParts(date);
   const out = {};
+
   for (const part of parts) {
     if (part.type !== 'literal') out[part.type] = part.value;
   }
@@ -245,6 +266,7 @@ function getNextRestartText() {
   const currentMinutes = local.hour * 60 + local.minute;
 
   let targetMinutes = null;
+
   for (const time of schedule) {
     const total = time.hours * 60 + time.minutes;
     if (total > currentMinutes) {
@@ -262,6 +284,7 @@ function getNextRestartText() {
 
   const hours = Math.floor(diffMinutes / 60);
   const minutes = diffMinutes % 60;
+
   if (hours > 0) return `in ${hours}h ${minutes}m`;
   return `in ${minutes}m`;
 }
@@ -310,13 +333,16 @@ async function fetchCFToolsServerStatus() {
   }
 
   try {
-    const response = await axios.get(`https://data.cftools.cloud/v1/server/${CFTOOLS_SERVER_ID}`, {
-      headers: {
-        Authorization: `Bearer ${CFTOOLS_API_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
-      timeout: 15000,
-    });
+    const response = await axios.get(
+      `https://data.cftools.cloud/v1/server/${CFTOOLS_SERVER_ID}`,
+      {
+        headers: {
+          Authorization: `Bearer ${CFTOOLS_API_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 15000,
+      }
+    );
 
     return { ok: true, payload: response.data };
   } catch (error) {
@@ -345,9 +371,11 @@ function extractServerStatus(payload) {
     root.playerCount,
     root.attributes?.players,
     root.attributes?.playerCount,
-    deepFind(root, (key, value) =>
-      /^(players|playerCount|numPlayers)$/i.test(key) &&
-      (typeof value === 'number' || typeof value === 'string')
+    deepFind(
+      root,
+      (key, value) =>
+        /^(players|playerCount|numPlayers)$/i.test(key) &&
+        (typeof value === 'number' || typeof value === 'string')
     )
   );
 
@@ -356,9 +384,11 @@ function extractServerStatus(payload) {
     root.slots,
     root.attributes?.maxPlayers,
     root.attributes?.slots,
-    deepFind(root, (key, value) =>
-      /^(maxPlayers|slots|maxPlayerCount)$/i.test(key) &&
-      (typeof value === 'number' || typeof value === 'string')
+    deepFind(
+      root,
+      (key, value) =>
+        /^(maxPlayers|slots|maxPlayerCount)$/i.test(key) &&
+        (typeof value === 'number' || typeof value === 'string')
     )
   );
 
@@ -387,14 +417,6 @@ function buildStatusEmbed(status) {
     );
 }
 
-function getStatusPanelState() {
-  return getJsonFile(STATUS_STATE_FILE, {});
-}
-
-function setStatusPanelState(state) {
-  setJsonFile(STATUS_STATE_FILE, state);
-}
-
 async function resolveStatusMessage() {
   if (!STATUS_CHANNEL_ID) throw new Error('STATUS_CHANNEL_ID is missing');
 
@@ -405,6 +427,7 @@ async function resolveStatusMessage() {
 
   const state = getStatusPanelState();
   const messageId = safe(state.messageId);
+
   if (!messageId) return { channel, message: null };
 
   const message = await channel.messages.fetch(messageId).catch(() => null);
@@ -435,6 +458,7 @@ async function createOrReplaceStatusPanel() {
   const embed = await renderStatusEmbed();
 
   let finalMessage = message;
+
   if (finalMessage) {
     await finalMessage.edit({ embeds: [embed] });
   } else {
@@ -449,6 +473,7 @@ async function refreshStatusPanel() {
   try {
     const { message } = await resolveStatusMessage();
     if (!message) return;
+
     const embed = await renderStatusEmbed();
     await message.edit({ embeds: [embed] });
   } catch (error) {
@@ -486,9 +511,34 @@ async function replyWithError(interaction, content) {
   }
 }
 
+function getMissingChannelPermissions(channel, me) {
+  const perms = channel.permissionsFor(me);
+  if (!perms) return ['ViewChannel', 'SendMessages', 'EmbedLinks'];
+
+  const needed = [
+    PermissionsBitField.Flags.ViewChannel,
+    PermissionsBitField.Flags.SendMessages,
+    PermissionsBitField.Flags.EmbedLinks,
+  ];
+
+  const missing = [];
+
+  if (!perms.has(PermissionsBitField.Flags.ViewChannel)) missing.push('ViewChannel');
+  if (!perms.has(PermissionsBitField.Flags.SendMessages)) missing.push('SendMessages');
+  if (!perms.has(PermissionsBitField.Flags.EmbedLinks)) missing.push('EmbedLinks');
+
+  return missing;
+}
+
 client.once(Events.ClientReady, async () => {
   console.log('Bot online');
-  await refreshStatusPanel();
+
+  try {
+    await refreshStatusPanel();
+  } catch (error) {
+    console.error('Initial status refresh error:', error);
+  }
+
   setInterval(async () => {
     await refreshStatusPanel();
   }, 60 * 1000);
@@ -498,8 +548,34 @@ client.on(Events.InteractionCreate, async (interaction) => {
   try {
     if (interaction.isChatInputCommand()) {
       if (interaction.commandName === 'ticketpanel') {
-        await interaction.reply({ content: 'Suggestion panel sent.', ephemeral: true });
-        await interaction.channel.send(buildSuggestionPanel());
+        const channel = interaction.channel;
+
+        if (!channel || !channel.isTextBased()) {
+          await interaction.reply({
+            content: 'This command can only be used in a normal text channel.',
+            ephemeral: true,
+          });
+          return;
+        }
+
+        const me = interaction.guild?.members?.me;
+        const missing = me ? getMissingChannelPermissions(channel, me) : ['Unknown'];
+
+        if (missing.length) {
+          await interaction.reply({
+            content:
+              `I cannot send the suggestion panel in this channel.\n` +
+              `Missing permissions: ${missing.join(', ')}`,
+            ephemeral: true,
+          });
+          return;
+        }
+
+        await channel.send(buildSuggestionPanel());
+        await interaction.reply({
+          content: 'Suggestion panel sent.',
+          ephemeral: true,
+        });
         return;
       }
 
@@ -528,7 +604,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return;
     }
 
-    if (interaction.type === InteractionType.ModalSubmit && interaction.customId === SUGGESTION_MODAL_ID) {
+    if (
+      interaction.type === InteractionType.ModalSubmit &&
+      interaction.customId === SUGGESTION_MODAL_ID
+    ) {
       await interaction.deferReply({ ephemeral: true });
 
       if (!TRELLO_KEY || !TRELLO_TOKEN || !TRELLO_BOARD_SHORTLINK) {
@@ -540,7 +619,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const title = safe(interaction.fields.getTextInputValue('title'), 'No title');
       const category = safe(interaction.fields.getTextInputValue('category'), 'None');
-      const description = safe(interaction.fields.getTextInputValue('description'), 'No description');
+      const description = safe(
+        interaction.fields.getTextInputValue('description'),
+        'No description'
+      );
 
       const card = await createSuggestionCard({
         title,
@@ -560,6 +642,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await interaction.editReply({
         content: 'Your suggestion has been submitted successfully.',
       });
+      return;
     }
   } catch (error) {
     console.error('Interaction error:', error);
@@ -577,6 +660,7 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
     if (!hadRole && hasRoleNow) {
       const channel = await newMember.guild.channels.fetch(WELCOME_CHANNEL_ID).catch(() => null);
       if (!channel || !channel.isTextBased()) return;
+
       await channel.send({ embeds: [buildWelcomeEmbed(newMember)] });
     }
   } catch (error) {
