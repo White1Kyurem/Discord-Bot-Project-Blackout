@@ -515,12 +515,6 @@ function getMissingChannelPermissions(channel, me) {
   const perms = channel.permissionsFor(me);
   if (!perms) return ['ViewChannel', 'SendMessages', 'EmbedLinks'];
 
-  const needed = [
-    PermissionsBitField.Flags.ViewChannel,
-    PermissionsBitField.Flags.SendMessages,
-    PermissionsBitField.Flags.EmbedLinks,
-  ];
-
   const missing = [];
 
   if (!perms.has(PermissionsBitField.Flags.ViewChannel)) missing.push('ViewChannel');
@@ -586,15 +580,37 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       if (interaction.commandName === 'statuspanel') {
         await interaction.deferReply({ ephemeral: true });
-        await createOrReplaceStatusPanel();
-        await interaction.editReply({ content: 'Status panel created or updated.' });
+
+        try {
+          await createOrReplaceStatusPanel();
+          await interaction.editReply({
+            content: 'Status panel created successfully.',
+          });
+        } catch (error) {
+          console.error('Status panel error:', error);
+          await interaction.editReply({
+            content: 'Failed to create the status panel.',
+          });
+        }
+
         return;
       }
 
       if (interaction.commandName === 'refreshstatus') {
         await interaction.deferReply({ ephemeral: true });
-        await refreshStatusPanel();
-        await interaction.editReply({ content: 'Status panel refreshed.' });
+
+        try {
+          await refreshStatusPanel();
+          await interaction.editReply({
+            content: 'Status panel refreshed.',
+          });
+        } catch (error) {
+          console.error('Refresh status error:', error);
+          await interaction.editReply({
+            content: 'Failed to refresh the status panel.',
+          });
+        }
+
         return;
       }
     }
