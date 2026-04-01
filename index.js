@@ -289,44 +289,6 @@ function getNextRestartText() {
   return `in ${minutes}m`;
 }
 
-function deepFind(obj, predicate, visited = new Set()) {
-  if (!obj || typeof obj !== 'object' || visited.has(obj)) return undefined;
-  visited.add(obj);
-
-  if (Array.isArray(obj)) {
-    for (const item of obj) {
-      const found = deepFind(item, predicate, visited);
-      if (found !== undefined) return found;
-    }
-    return undefined;
-  }
-
-  for (const [key, value] of Object.entries(obj)) {
-    if (predicate(key, value)) return value;
-    const found = deepFind(value, predicate, visited);
-    if (found !== undefined) return found;
-  }
-
-  return undefined;
-}
-
-function firstNumber(...values) {
-  for (const value of values) {
-    if (typeof value === 'number' && Number.isFinite(value)) return value;
-    if (typeof value === 'string' && value.trim() !== '' && !Number.isNaN(Number(value))) {
-      return Number(value);
-    }
-  }
-  return undefined;
-}
-
-function firstBoolean(...values) {
-  for (const value of values) {
-    if (typeof value === 'boolean') return value;
-  }
-  return undefined;
-}
-
 async function fetchCFToolsServerStatus() {
   if (!CFTOOLS_API_TOKEN || !CFTOOLS_SERVER_ID) {
     return { ok: false, error: 'Missing CFTools configuration' };
@@ -359,49 +321,47 @@ async function fetchCFToolsServerStatus() {
 function extractServerStatus(payload) {
   const root = payload?.server || payload?.data || payload || {};
 
-  const online = firstBoolean(
-    root.online,
-    root.isOnline,
-    root.status === 'online',
-    root.attributes?.status === 'online'
-  );
+  console.log('CFTools RAW:', JSON.stringify(root, null, 2));
 
-  const players = firstNumber(
-    root.players,
-    root.playerCount,
-    root.attributes?.players,
-    root.attributes?.playerCount,
-    deepFind(
-      root,
-      (key, value) =>
-        /^(players|playerCount|numPlayers)$/i.test(key) &&
-        (typeof value === 'number' || typeof value === 'string')
-    )
-  );
+  const statusString =
+    root.status ||
+    root.attributes?.status ||
+    root.server_status ||
+    root.game?.status ||
+    '';
 
-  const maxPlayers = firstNumber(
-    root.maxPlayers,
-    root.slots,
-    root.attributes?.maxPlayers,
-    root.attributes?.slots,
-    deepFind(
-      root,
-      (key, value) =>
-        /^(maxPlayers|slots|maxPlayerCount)$/i.test(key) &&
-        (typeof value === 'number' || typeof value === 'string')
-    )
-  );
+  const online =
+    String(statusString).toLowerCase() === 'online' ||
+    root.online === true ||
+    root.isOnline === true ||
+    root.attributes?.online === true;
+
+  const players =
+    root.players ??
+    root.attributes?.players ??
+    root.playerCount ??
+    root.attributes?.playerCount ??
+    root.game?.players ??
+    0;
+
+  const maxPlayers =
+    root.maxPlayers ??
+    root.attributes?.maxPlayers ??
+    root.slots ??
+    root.attributes?.slots ??
+    root.game?.maxPlayers ??
+    0;
 
   const name =
-    safe(root.name) ||
-    safe(root.serverName) ||
-    safe(root.attributes?.name) ||
+    root.name ||
+    root.attributes?.name ||
+    root.serverName ||
     STATUS_PANEL_TITLE;
 
   return {
-    online: typeof online === 'boolean' ? online : false,
-    players: typeof players === 'number' ? players : 0,
-    maxPlayers: typeof maxPlayers === 'number' ? maxPlayers : 0,
+    online,
+    players: Number(players) || 0,
+    maxPlayers: Number(maxPlayers) || 0,
     name,
   };
 }
