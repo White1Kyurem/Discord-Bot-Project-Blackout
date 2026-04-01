@@ -425,15 +425,24 @@ async function renderStatusEmbed() {
 }
 
 async function createOrReplaceStatusPanel() {
+  console.log('createOrReplaceStatusPanel() started');
+
   const { channel, message } = await resolveStatusMessage();
+  console.log('Resolved channel:', channel?.id);
+  console.log('Existing message:', message?.id || 'none');
+
   const embed = await renderStatusEmbed();
+  console.log('Embed rendered successfully');
 
   let finalMessage = message;
 
   if (finalMessage) {
+    console.log('Editing existing status message...');
     await finalMessage.edit({ embeds: [embed] });
   } else {
+    console.log('Sending new status message...');
     finalMessage = await channel.send({ embeds: [embed] });
+    console.log('New status message sent:', finalMessage.id);
     setStatusPanelState({ channelId: channel.id, messageId: finalMessage.id });
   }
 
@@ -552,22 +561,34 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
 
       if (interaction.commandName === 'statuspanel') {
-        await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ ephemeral: true });
 
-        try {
-          await createOrReplaceStatusPanel();
-          await interaction.editReply({
-            content: 'Status panel created successfully.',
-          });
-        } catch (error) {
-          console.error('Status panel error:', error);
-          await interaction.editReply({
-            content: 'Failed to create the status panel.',
-          });
-        }
+  try {
+    console.log('Running /statuspanel...');
+    console.log('STATUS_CHANNEL_ID:', STATUS_CHANNEL_ID);
+    console.log('CFTOOLS_APPLICATION_ID:', CFTOOLS_APPLICATION_ID);
+    console.log('CFTOOLS_SERVER_ID:', CFTOOLS_SERVER_ID);
+    console.log('Has CFTOOLS_API_TOKEN:', !!CFTOOLS_API_TOKEN);
 
-        return;
-      }
+    const result = await createOrReplaceStatusPanel();
+
+    console.log('Status panel success. Message ID:', result?.id);
+
+    await interaction.editReply({
+      content: 'Status panel created successfully.',
+    });
+  } catch (error) {
+    console.error('STATUSPANEL FULL ERROR:', error);
+    console.error('STATUSPANEL MESSAGE:', error?.message);
+    console.error('STATUSPANEL STACK:', error?.stack);
+
+    await interaction.editReply({
+      content: `Failed to create the status panel.\nError: ${error?.message || 'Unknown error'}`,
+    });
+  }
+
+  return;
+}
 
       if (interaction.commandName === 'refreshstatus') {
         await interaction.deferReply({ ephemeral: true });
