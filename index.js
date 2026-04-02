@@ -39,6 +39,8 @@ const {
   TIMEZONE = 'Europe/Zurich',
   STATUS_PANEL_TITLE = 'Project Blackout PVP',
   WELCOME_IMAGE_URL = 'https://raw.githubusercontent.com/White1Kyurem/Discord-Bot-Project-Blackout/main/ChatGPT%20Image%2031.%20M%C3%A4rz%202026%2C%2019_16_34.png',
+  SERVER_ADDRESS = 'YOUR_IP:PORT',
+  TRELLO_BOARD_URL = 'https://trello.com/b/VmxUfjSm',
 } = process.env;
 
 const DATA_DIR = path.join(__dirname, 'data');
@@ -96,15 +98,30 @@ function setStatusPanelState(state) {
 function buildSuggestionPanel() {
   const embed = new EmbedBuilder()
     .setColor(0x111111)
-    .setTitle('Suggestion System')
+    .setTitle('📝 Project Blackout Suggestions')
     .setDescription(
-      'Click the button below to submit a suggestion.\n\nYour suggestion will be sent to our Trello board.'
-    );
+      'Have an idea for the server?\n\n' +
+      'Use the button below to submit a suggestion for new features, balancing, events, fixes, or improvements.'
+    )
+    .addFields(
+      {
+        name: 'What you can suggest',
+        value: '• New features\n• PvP changes\n• Loot changes\n• Events\n• Bug fixes',
+        inline: false,
+      },
+      {
+        name: 'How it works',
+        value:
+          'Click the button below, fill out the form, and your suggestion will be sent directly to our Trello board.',
+        inline: false,
+      }
+    )
+    .setFooter({ text: 'Project Blackout PVP • Community Suggestions' });
 
   const button = new ButtonBuilder()
     .setCustomId(PANEL_BUTTON_ID)
     .setLabel('Submit Suggestion')
-    .setStyle(ButtonStyle.Primary);
+    .setStyle(ButtonStyle.Success);
 
   return {
     embeds: [embed],
@@ -377,15 +394,48 @@ function extractServerStatus(payload) {
   };
 }
 
-function buildStatusEmbed(status) {
-  return new EmbedBuilder()
+function buildStatusPanel(status) {
+  const connectButton = new ButtonBuilder()
+    .setLabel('Connect to Server')
+    .setStyle(ButtonStyle.Link)
+    .setURL(`https://dayzsalauncher.com/#/join/${SERVER_ADDRESS}`);
+
+  const embed = new EmbedBuilder()
     .setColor(status.online ? 0x16a34a : 0xdc2626)
-    .setTitle(status.name || STATUS_PANEL_TITLE)
+    .setTitle(`📡 ${status.name || STATUS_PANEL_TITLE}`)
+    .setDescription(
+      status.online
+        ? 'The server is currently online and ready to play.'
+        : 'The server is currently offline.'
+    )
     .addFields(
-      { name: 'Server', value: status.online ? '🟢 Online' : '🔴 Offline', inline: false },
-      { name: 'Players', value: `${status.players} / ${status.maxPlayers}`, inline: false },
-      { name: 'Next Restart', value: getNextRestartText(), inline: false }
-    );
+      {
+        name: 'Server Status',
+        value: status.online ? '🟢 Online' : '🔴 Offline',
+        inline: true,
+      },
+      {
+        name: 'Players',
+        value: `${status.players} / ${status.maxPlayers}`,
+        inline: true,
+      },
+      {
+        name: 'Next Restart',
+        value: getNextRestartText(),
+        inline: true,
+      },
+      {
+        name: 'IP & Port',
+        value: `\`${SERVER_ADDRESS}\``,
+        inline: false,
+      }
+    )
+    .setFooter({ text: 'Project Blackout PVP • Live Server Status' });
+
+  return {
+    embeds: [embed],
+    components: [new ActionRowBuilder().addComponents(connectButton)],
+  };
 }
 
 async function resolveStatusMessage() {
@@ -405,57 +455,91 @@ async function resolveStatusMessage() {
   return { channel, message };
 }
 
-async function renderStatusEmbed() {
+async function renderStatusPanel() {
   const result = await fetchCFToolsServerStatus();
 
   if (!result.ok) {
-    return new EmbedBuilder()
-      .setColor(0xdc2626)
-      .setTitle(STATUS_PANEL_TITLE)
-      .addFields(
-        { name: 'Server', value: '🔴 Offline', inline: false },
-        { name: 'Players', value: '0 / 0', inline: false },
-        { name: 'Next Restart', value: getNextRestartText(), inline: false }
-      )
-      .setFooter({ text: `Status fetch failed: ${String(result.error).slice(0, 120)}` });
+    const connectButton = new ButtonBuilder()
+      .setLabel('Connect to Server')
+      .setStyle(ButtonStyle.Link)
+      .setURL(`https://dayzsalauncher.com/#/join/${SERVER_ADDRESS}`);
+
+    return {
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0xdc2626)
+          .setTitle(STATUS_PANEL_TITLE)
+          .setDescription('The server status could not be loaded right now.')
+          .addFields(
+            { name: 'Server Status', value: '🔴 Offline', inline: true },
+            { name: 'Players', value: '0 / 0', inline: true },
+            { name: 'Next Restart', value: getNextRestartText(), inline: true },
+            { name: 'IP & Port', value: `\`${SERVER_ADDRESS}\``, inline: false }
+          )
+          .setFooter({
+            text: `Status fetch failed: ${String(result.error).slice(0, 120)}`,
+          }),
+      ],
+      components: [new ActionRowBuilder().addComponents(connectButton)],
+    };
   }
 
   const status = extractServerStatus(result.payload);
-  return buildStatusEmbed(status);
+  return buildStatusPanel(status);
 }
 
 async function createOrReplaceStatusPanel() {
-  console.log('createOrReplaceStatusPanel() started');
-
   const { channel, message } = await resolveStatusMessage();
-  console.log('Resolved channel:', channel?.id);
-  console.log('Existing message:', message?.id || 'none');
-
-  const embed = await renderStatusEmbed();
-  console.log('Embed rendered successfully');
+  const panel = await renderStatusPanel();
 
   let finalMessage = message;
 
-  if (finalMessage) {
-    console.log('Editing existing status message...');
-    await finalMessage.edit({ embeds: [embed] });
-  } else {
-    console.log('Sending new status message...');
-    finalMessage = await channel.send({ embeds: [embed] });
-    console.log('New status message sent:', finalMessage.id);
-    setStatusPanelState({ channelId: channel.id, messageId: finalMessage.id });
-  }
+  try {
+    if (finalMessage) {
+      await finalMessage.edit(panel);
+    } else {
+      finalMessage = await channel.send(panel);
+      setStatusPanelState({ channelId: channel.id, messageId: finalMessage.id });
+    }
 
-  return finalMessage;
+    return finalMessage;
+  } catch (error) {
+    const errorCode = error?.code || error?.rawError?.code;
+
+    if (errorCode === 10008) {
+      finalMessage = await channel.send(panel);
+      setStatusPanelState({ channelId: channel.id, messageId: finalMessage.id });
+      return finalMessage;
+    }
+
+    throw error;
+  }
 }
 
 async function refreshStatusPanel() {
   try {
-    const { message } = await resolveStatusMessage();
-    if (!message) return;
+    const { channel, message } = await resolveStatusMessage();
+    const panel = await renderStatusPanel();
 
-    const embed = await renderStatusEmbed();
-    await message.edit({ embeds: [embed] });
+    if (!message) {
+      const newMessage = await channel.send(panel);
+      setStatusPanelState({ channelId: channel.id, messageId: newMessage.id });
+      return;
+    }
+
+    try {
+      await message.edit(panel);
+    } catch (error) {
+      const errorCode = error?.code || error?.rawError?.code;
+
+      if (errorCode === 10008) {
+        const newMessage = await channel.send(panel);
+        setStatusPanelState({ channelId: channel.id, messageId: newMessage.id });
+        return;
+      }
+
+      throw error;
+    }
   } catch (error) {
     console.error('Status refresh error:', error);
   }
@@ -481,6 +565,21 @@ function buildWelcomeEmbed(member) {
   }
 
   return embed;
+}
+
+function buildSuggestionSuccessEmbed() {
+  return new EmbedBuilder()
+    .setColor(0x22c55e)
+    .setTitle('✅ Suggestion Submitted')
+    .setDescription(
+      'Your suggestion has been successfully sent to our Trello board.\n\n' +
+      'You can track all suggestions, updates, and current work below.'
+    )
+    .addFields({
+      name: 'View all suggestions',
+      value: `[Open Trello Board](${TRELLO_BOARD_URL})`,
+    })
+    .setFooter({ text: 'Project Blackout PVP • Suggestions' });
 }
 
 async function replyWithError(interaction, content) {
@@ -561,34 +660,22 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
 
       if (interaction.commandName === 'statuspanel') {
-  await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ ephemeral: true });
 
-  try {
-    console.log('Running /statuspanel...');
-    console.log('STATUS_CHANNEL_ID:', STATUS_CHANNEL_ID);
-    console.log('CFTOOLS_APPLICATION_ID:', CFTOOLS_APPLICATION_ID);
-    console.log('CFTOOLS_SERVER_ID:', CFTOOLS_SERVER_ID);
-    console.log('Has CFTOOLS_API_TOKEN:', !!CFTOOLS_API_TOKEN);
+        try {
+          await createOrReplaceStatusPanel();
+          await interaction.editReply({
+            content: 'Status panel created successfully.',
+          });
+        } catch (error) {
+          console.error('Status panel error:', error);
+          await interaction.editReply({
+            content: 'Failed to create the status panel.',
+          });
+        }
 
-    const result = await createOrReplaceStatusPanel();
-
-    console.log('Status panel success. Message ID:', result?.id);
-
-    await interaction.editReply({
-      content: 'Status panel created successfully.',
-    });
-  } catch (error) {
-    console.error('STATUSPANEL FULL ERROR:', error);
-    console.error('STATUSPANEL MESSAGE:', error?.message);
-    console.error('STATUSPANEL STACK:', error?.stack);
-
-    await interaction.editReply({
-      content: `Failed to create the status panel.\nError: ${error?.message || 'Unknown error'}`,
-    });
-  }
-
-  return;
-}
+        return;
+      }
 
       if (interaction.commandName === 'refreshstatus') {
         await interaction.deferReply({ ephemeral: true });
@@ -649,23 +736,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
         console.error('Suggestion log error:', logError);
       }
 
-const TRELLO_BOARD_URL = 'https://trello.com/b/VmxUfjSm';
-
-const embed = new EmbedBuilder()
-  .setColor(0x22c55e)
-  .setTitle('Suggestion Submitted')
-  .setDescription(
-    'Your suggestion has been successfully sent to our Trello board.\n\n' +
-    'You can track all suggestions, updates, and current work below.'
-  )
-  .addFields({
-    name: 'View all suggestions',
-    value: `[Open Trello Board](${TRELLO_BOARD_URL})`,
-  });
-
-await interaction.editReply({
-  embeds: [embed],
-});
+      await interaction.editReply({
+        embeds: [buildSuggestionSuccessEmbed()],
+      });
       return;
     }
   } catch (error) {
