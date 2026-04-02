@@ -39,7 +39,7 @@ const {
   TIMEZONE = 'Europe/Zurich',
   STATUS_PANEL_TITLE = 'Project Blackout PVP',
   WELCOME_IMAGE_URL = 'https://raw.githubusercontent.com/White1Kyurem/Discord-Bot-Project-Blackout/main/ChatGPT%20Image%2031.%20M%C3%A4rz%202026%2C%2019_16_34.png',
-  SERVER_ADDRESS = 'YOUR_IP:PORT',
+  SERVER_ADDRESS = '51.89.27.103:3437',
   TRELLO_BOARD_URL = 'https://trello.com/b/VmxUfjSm',
 } = process.env;
 
