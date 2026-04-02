@@ -649,7 +649,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         console.error('Suggestion log error:', logError);
       }
 
-      const TRELLO_BOARD_URL = 'https://trello.com/b/DEIN_LINK_HIER'; // <-- hier deinen Link einfügen
+const TRELLO_BOARD_URL = 'https://trello.com/b/VmxUfjSm';
 
 const embed = new EmbedBuilder()
   .setColor(0x22c55e)
