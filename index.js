@@ -649,9 +649,23 @@ client.on(Events.InteractionCreate, async (interaction) => {
         console.error('Suggestion log error:', logError);
       }
 
-      await interaction.editReply({
-        content: 'Your suggestion has been submitted successfully.',
-      });
+      const TRELLO_BOARD_URL = 'https://trello.com/b/DEIN_LINK_HIER'; // <-- hier deinen Link einfügen
+
+const embed = new EmbedBuilder()
+  .setColor(0x22c55e)
+  .setTitle('Suggestion Submitted')
+  .setDescription(
+    'Your suggestion has been successfully sent to our Trello board.\n\n' +
+    'You can track all suggestions, updates, and current work below.'
+  )
+  .addFields({
+    name: 'View all suggestions',
+    value: `[Open Trello Board](${TRELLO_BOARD_URL})`,
+  });
+
+await interaction.editReply({
+  embeds: [embed],
+});
       return;
     }
   } catch (error) {
