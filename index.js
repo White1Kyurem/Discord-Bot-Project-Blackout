@@ -1,7 +1,5 @@
 require('dotenv').config();
 
-const fs = require('fs');
-const path = require('path');
 const axios = require('axios');
 const {
   Client,
@@ -28,71 +26,20 @@ const {
   TRELLO_TOKEN,
   TRELLO_BOARD_SHORTLINK,
   TRELLO_TARGET_LIST_NAME = 'Suggestions',
+  TRELLO_BOARD_URL = 'https://trello.com/b/VmxUfjSm',
   LOG_CHANNEL_ID,
   WELCOME_CHANNEL_ID,
   VERIFIED_ROLE_ID,
-  STATUS_CHANNEL_ID,
-  CFTOOLS_API_TOKEN,
-  CFTOOLS_APPLICATION_ID,
-  CFTOOLS_SERVER_ID,
-  RESTART_TIMES = '00:00,04:00,08:00,12:00,16:00,20:00',
-  TIMEZONE = 'Europe/Zurich',
-  STATUS_PANEL_TITLE = 'Project Blackout PVP',
   WELCOME_IMAGE_URL = 'https://raw.githubusercontent.com/White1Kyurem/Discord-Bot-Project-Blackout/main/ChatGPT%20Image%2031.%20M%C3%A4rz%202026%2C%2019_16_34.png',
-  SERVER_ADDRESS = '51.89.27.103:3437',
-  TRELLO_BOARD_URL = 'https://trello.com/b/VmxUfjSm',
 } = process.env;
-
-const DATA_DIR = path.join(__dirname, 'data');
-const STATUS_STATE_FILE = path.join(DATA_DIR, 'status-panel.json');
 
 const PANEL_BUTTON_ID = 'open_suggestion_modal';
 const SUGGESTION_MODAL_ID = 'suggestion_modal';
-
-function ensureDataDir() {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
-}
-
-function ensureStatusStateFile() {
-  ensureDataDir();
-  if (!fs.existsSync(STATUS_STATE_FILE)) {
-    fs.writeFileSync(STATUS_STATE_FILE, '{}', 'utf8');
-  }
-}
 
 function safe(value, fallback = '') {
   if (!value || typeof value !== 'string') return fallback;
   const trimmed = value.trim();
   return trimmed.length ? trimmed : fallback;
-}
-
-function readJsonFile(filePath, fallback) {
-  try {
-    if (!fs.existsSync(filePath)) return fallback;
-    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
-  } catch (error) {
-    console.error(`Failed to read ${filePath}:`, error);
-    return fallback;
-  }
-}
-
-function writeJsonFile(filePath, data) {
-  try {
-    ensureDataDir();
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
-  } catch (error) {
-    console.error(`Failed to write ${filePath}:`, error);
-  }
-}
-
-function getStatusPanelState() {
-  return readJsonFile(STATUS_STATE_FILE, {});
-}
-
-function setStatusPanelState(state) {
-  writeJsonFile(STATUS_STATE_FILE, state);
 }
 
 function buildSuggestionPanel() {
@@ -237,314 +184,6 @@ async function sendSuggestionLog(interaction, title, category, description, card
   await channel.send({ embeds: [embed] });
 }
 
-function parseRestartTimes() {
-  return RESTART_TIMES.split(',')
-    .map((entry) => entry.trim())
-    .filter(Boolean)
-    .map((entry) => {
-      const match = /^(\d{1,2}):(\d{2})$/.exec(entry);
-      if (!match) return null;
-
-      const hours = Number(match[1]);
-      const minutes = Number(match[2]);
-
-      if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
-      return { hours, minutes };
-    })
-    .filter(Boolean)
-    .sort((a, b) => (a.hours * 60 + a.minutes) - (b.hours * 60 + b.minutes));
-}
-
-function getLocalDateParts(date, timeZone) {
-  const formatter = new Intl.DateTimeFormat('en-GB', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  });
-
-  const parts = formatter.formatToParts(date);
-  const out = {};
-
-  for (const part of parts) {
-    if (part.type !== 'literal') out[part.type] = part.value;
-  }
-
-  return {
-    year: Number(out.year),
-    month: Number(out.month),
-    day: Number(out.day),
-    hour: Number(out.hour),
-    minute: Number(out.minute),
-  };
-}
-
-function getNextRestartText() {
-  const schedule = parseRestartTimes();
-  if (!schedule.length) return 'Not configured';
-
-  const now = new Date();
-  const local = getLocalDateParts(now, TIMEZONE);
-  const currentMinutes = local.hour * 60 + local.minute;
-
-  let targetMinutes = null;
-
-  for (const time of schedule) {
-    const total = time.hours * 60 + time.minutes;
-    if (total > currentMinutes) {
-      targetMinutes = total;
-      break;
-    }
-  }
-
-  let diffMinutes;
-  if (targetMinutes === null) {
-    diffMinutes = (24 * 60 - currentMinutes) + (schedule[0].hours * 60 + schedule[0].minutes);
-  } else {
-    diffMinutes = targetMinutes - currentMinutes;
-  }
-
-  const hours = Math.floor(diffMinutes / 60);
-  const minutes = diffMinutes % 60;
-
-  if (hours > 0) return `in ${hours}h ${minutes}m`;
-  return `in ${minutes}m`;
-}
-
-async function fetchCFToolsServerStatus() {
-  if (!CFTOOLS_API_TOKEN || !CFTOOLS_SERVER_ID || !CFTOOLS_APPLICATION_ID) {
-    return { ok: false, error: 'Missing CFTools configuration' };
-  }
-
-  try {
-    const response = await axios.get(
-      `https://data.cftools.cloud/v1/server/${CFTOOLS_SERVER_ID}`,
-      {
-        headers: {
-          Authorization: `Bearer ${CFTOOLS_API_TOKEN}`,
-          'User-Agent': CFTOOLS_APPLICATION_ID,
-          'Content-Type': 'application/json',
-        },
-        timeout: 15000,
-      }
-    );
-
-    return { ok: true, payload: response.data };
-  } catch (error) {
-    console.error('CFTools error response:', error.response?.data || error.message);
-
-    const message =
-      error.response?.data?.message ||
-      error.response?.data?.error ||
-      error.message ||
-      'Unknown error';
-
-    return { ok: false, error: message };
-  }
-}
-
-function extractServerStatus(payload) {
-  const root = payload?.server || payload?.data || payload || {};
-
-  console.log('CFTools RAW:', JSON.stringify(root, null, 2));
-
-  const statusString =
-    root.status ||
-    root.attributes?.status ||
-    root.server_status ||
-    root.game?.status ||
-    '';
-
-  const online =
-    String(statusString).toLowerCase() === 'online' ||
-    root.online === true ||
-    root.isOnline === true ||
-    root.attributes?.online === true;
-
-  const players =
-    root.players ??
-    root.attributes?.players ??
-    root.playerCount ??
-    root.attributes?.playerCount ??
-    root.game?.players ??
-    0;
-
-  const maxPlayers =
-    root.maxPlayers ??
-    root.attributes?.maxPlayers ??
-    root.slots ??
-    root.attributes?.slots ??
-    root.game?.maxPlayers ??
-    0;
-
-  const name =
-    root.name ||
-    root.attributes?.name ||
-    root.serverName ||
-    STATUS_PANEL_TITLE;
-
-  return {
-    online,
-    players: Number(players) || 0,
-    maxPlayers: Number(maxPlayers) || 0,
-    name,
-  };
-}
-
-function buildStatusPanel(status) {
-  const connectButton = new ButtonBuilder()
-    .setLabel('Connect to Server')
-    .setStyle(ButtonStyle.Link)
-    .setURL(`https://dayzsalauncher.com/#/join/${SERVER_ADDRESS}`);
-
-  const embed = new EmbedBuilder()
-    .setColor(status.online ? 0x16a34a : 0xdc2626)
-    .setTitle(`📡 ${status.name || STATUS_PANEL_TITLE}`)
-    .setDescription(
-      status.online
-        ? 'The server is currently online and ready to play.'
-        : 'The server is currently offline.'
-    )
-    .addFields(
-      {
-        name: 'Server Status',
-        value: status.online ? '🟢 Online' : '🔴 Offline',
-        inline: true,
-      },
-      {
-        name: 'Players',
-        value: `${status.players} / ${status.maxPlayers}`,
-        inline: true,
-      },
-      {
-        name: 'Next Restart',
-        value: getNextRestartText(),
-        inline: true,
-      },
-      {
-        name: 'IP & Port',
-        value: `\`${SERVER_ADDRESS}\``,
-        inline: false,
-      }
-    )
-    .setFooter({ text: 'Project Blackout PVP • Live Server Status' });
-
-  return {
-    embeds: [embed],
-    components: [new ActionRowBuilder().addComponents(connectButton)],
-  };
-}
-
-async function resolveStatusMessage() {
-  if (!STATUS_CHANNEL_ID) throw new Error('STATUS_CHANNEL_ID is missing');
-
-  const channel = await client.channels.fetch(STATUS_CHANNEL_ID).catch(() => null);
-  if (!channel || !channel.isTextBased()) {
-    throw new Error('Status channel not found or not text based');
-  }
-
-  const state = getStatusPanelState();
-  const messageId = safe(state.messageId);
-
-  if (!messageId) return { channel, message: null };
-
-  const message = await channel.messages.fetch(messageId).catch(() => null);
-  return { channel, message };
-}
-
-async function renderStatusPanel() {
-  const result = await fetchCFToolsServerStatus();
-
-  if (!result.ok) {
-    const connectButton = new ButtonBuilder()
-      .setLabel('Connect to Server')
-      .setStyle(ButtonStyle.Link)
-      .setURL(`https://dayzsalauncher.com/#/join/${SERVER_ADDRESS}`);
-
-    return {
-      embeds: [
-        new EmbedBuilder()
-          .setColor(0xdc2626)
-          .setTitle(STATUS_PANEL_TITLE)
-          .setDescription('The server status could not be loaded right now.')
-          .addFields(
-            { name: 'Server Status', value: '🔴 Offline', inline: true },
-            { name: 'Players', value: '0 / 0', inline: true },
-            { name: 'Next Restart', value: getNextRestartText(), inline: true },
-            { name: 'IP & Port', value: `\`${SERVER_ADDRESS}\``, inline: false }
-          )
-          .setFooter({
-            text: `Status fetch failed: ${String(result.error).slice(0, 120)}`,
-          }),
-      ],
-      components: [new ActionRowBuilder().addComponents(connectButton)],
-    };
-  }
-
-  const status = extractServerStatus(result.payload);
-  return buildStatusPanel(status);
-}
-
-async function createOrReplaceStatusPanel() {
-  const { channel, message } = await resolveStatusMessage();
-  const panel = await renderStatusPanel();
-
-  let finalMessage = message;
-
-  try {
-    if (finalMessage) {
-      await finalMessage.edit(panel);
-    } else {
-      finalMessage = await channel.send(panel);
-      setStatusPanelState({ channelId: channel.id, messageId: finalMessage.id });
-    }
-
-    return finalMessage;
-  } catch (error) {
-    const errorCode = error?.code || error?.rawError?.code;
-
-    if (errorCode === 10008) {
-      finalMessage = await channel.send(panel);
-      setStatusPanelState({ channelId: channel.id, messageId: finalMessage.id });
-      return finalMessage;
-    }
-
-    throw error;
-  }
-}
-
-async function refreshStatusPanel() {
-  try {
-    const { channel, message } = await resolveStatusMessage();
-    const panel = await renderStatusPanel();
-
-    if (!message) {
-      const newMessage = await channel.send(panel);
-      setStatusPanelState({ channelId: channel.id, messageId: newMessage.id });
-      return;
-    }
-
-    try {
-      await message.edit(panel);
-    } catch (error) {
-      const errorCode = error?.code || error?.rawError?.code;
-
-      if (errorCode === 10008) {
-        const newMessage = await channel.send(panel);
-        setStatusPanelState({ channelId: channel.id, messageId: newMessage.id });
-        return;
-      }
-
-      throw error;
-    }
-  } catch (error) {
-    console.error('Status refresh error:', error);
-  }
-}
-
 function buildWelcomeEmbed(member) {
   const embed = new EmbedBuilder()
     .setColor(0x0f0f0f)
@@ -605,18 +244,6 @@ function getMissingChannelPermissions(channel, me) {
 
 client.once(Events.ClientReady, async () => {
   console.log('Bot online');
-
-  ensureStatusStateFile();
-
-  try {
-    await refreshStatusPanel();
-  } catch (error) {
-    console.error('Initial status refresh error:', error);
-  }
-
-  setInterval(async () => {
-    await refreshStatusPanel();
-  }, 60 * 1000);
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
@@ -656,42 +283,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       if (interaction.commandName === 'suggestion') {
         await interaction.showModal(buildSuggestionModal());
-        return;
-      }
-
-      if (interaction.commandName === 'statuspanel') {
-        await interaction.deferReply({ ephemeral: true });
-
-        try {
-          await createOrReplaceStatusPanel();
-          await interaction.editReply({
-            content: 'Status panel created successfully.',
-          });
-        } catch (error) {
-          console.error('Status panel error:', error);
-          await interaction.editReply({
-            content: 'Failed to create the status panel.',
-          });
-        }
-
-        return;
-      }
-
-      if (interaction.commandName === 'refreshstatus') {
-        await interaction.deferReply({ ephemeral: true });
-
-        try {
-          await refreshStatusPanel();
-          await interaction.editReply({
-            content: 'Status panel refreshed.',
-          });
-        } catch (error) {
-          console.error('Refresh status error:', error);
-          await interaction.editReply({
-            content: 'Failed to refresh the status panel.',
-          });
-        }
-
         return;
       }
     }
