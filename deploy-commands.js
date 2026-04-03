@@ -12,16 +12,6 @@ const commands = [
     name: 'suggestion',
     description: 'Open the suggestion form directly',
   },
-  {
-    name: 'statuspanel',
-    description: 'Create or update the server status panel',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString(),
-  },
-  {
-    name: 'refreshstatus',
-    description: 'Refresh the server status panel manually',
-    default_member_permissions: PermissionFlagsBits.Administrator.toString(),
-  },
 ];
 
 async function main() {
