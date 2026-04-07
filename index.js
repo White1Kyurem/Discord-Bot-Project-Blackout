@@ -14,8 +14,10 @@ const {
   ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
+  InteractionType,
   PermissionsBitField,
   ActivityType,
+  MessageFlags,
 } = require('discord.js');
 
 const client = new Client({
@@ -23,129 +25,152 @@ const client = new Client({
 });
 
 const CONFIG = {
+  token: process.env.DISCORD_TOKEN,
   serverName: process.env.SERVER_NAME || 'Project Blackout PVP',
-  logChannelId: process.env.LOG_CHANNEL_ID || '',
-  welcomeChannelId: process.env.WELCOME_CHANNEL_ID || '',
-  verifiedRoleId: process.env.VERIFIED_ROLE_ID || '',
-  welcomeImageUrl: process.env.WELCOME_IMAGE_URL || '',
+
   trelloKey: process.env.TRELLO_KEY || '',
   trelloToken: process.env.TRELLO_TOKEN || '',
   trelloBoardShortlink: process.env.TRELLO_BOARD_SHORTLINK || '',
   trelloTargetListName: process.env.TRELLO_TARGET_LIST_NAME || 'Suggestions',
-  trelloBoardUrl: process.env.TRELLO_BOARD_URL || '',
-  cftoolsServerId: process.env.CFTOOLS_SERVER_ID || '',
-  cftoolsApiToken: process.env.CFTOOLS_API_TOKEN || '',
-  statusPanelTitle: process.env.STATUS_PANEL_TITLE || 'Server Status',
-  statusChannelId: process.env.STATUS_CHANNEL_ID || '',
+  trelloBoardUrl: process.env.TRELLO_BOARD_URL || 'https://trello.com/',
+
+  logChannelId: process.env.LOG_CHANNEL_ID || '',
+  welcomeChannelId: process.env.WELCOME_CHANNEL_ID || '',
+  verifiedRoleId: process.env.VERIFIED_ROLE_ID || '',
+  welcomeImageUrl: process.env.WELCOME_IMAGE_URL || '',
 };
 
-const RULES_FILE = path.join(__dirname, 'rules.json');
-const STATUS_STATE_FILE = path.join(__dirname, 'data', 'status-panel.json');
-const SUGGESTION_BUTTON_ID = 'open_suggestion_modal';
+const DATA_DIR = path.join(__dirname, 'data');
+const RULES_FILE = path.join(DATA_DIR, 'rules.json');
+
+const PANEL_BUTTON_ID = 'open_suggestion_modal';
 const SUGGESTION_MODAL_ID = 'suggestion_modal';
-const DEFAULT_RULES = {
-  title: 'Server Rules',
-  text:
-    '1. Respect all players.\n' +
-    '2. No cheating, exploiting, or duping.\n' +
-    '3. No hate speech, harassment, or excessive toxicity.\n' +
-    '4. Follow staff instructions immediately.\n' +
-    '5. Keep the server fun and fair for everyone.',
-};
 
 function ensureDataFiles() {
-  if (!fs.existsSync(path.dirname(STATUS_STATE_FILE))) {
-    fs.mkdirSync(path.dirname(STATUS_STATE_FILE), { recursive: true });
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
   }
 
   if (!fs.existsSync(RULES_FILE)) {
-    fs.writeFileSync(RULES_FILE, JSON.stringify(DEFAULT_RULES, null, 2));
-  }
-
-  if (!fs.existsSync(STATUS_STATE_FILE)) {
     fs.writeFileSync(
-      STATUS_STATE_FILE,
-      JSON.stringify({ channelId: null, messageId: null }, null, 2)
+      RULES_FILE,
+      JSON.stringify(
+        {
+          title: 'Server Rules',
+          text:
+            '1. Respect all players.\n' +
+            '2. No cheating or exploiting.\n' +
+            '3. No abusive language.\n' +
+            '4. Follow staff instructions.\n' +
+            '5. Have fun.',
+        },
+        null,
+        2
+      ),
+      'utf8'
     );
   }
 }
 
-function safeText(value, fallback = '') {
+function safeString(value, fallback = '') {
   if (typeof value !== 'string') return fallback;
-  const cleaned = value.trim();
-  return cleaned.length ? cleaned : fallback;
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : fallback;
 }
 
-function loadJson(filePath, fallback) {
+function getRulesData() {
+  const fallback = {
+    title: 'Server Rules',
+    text:
+      '1. Respect all players.\n' +
+      '2. No cheating or exploiting.\n' +
+      '3. No abusive language.\n' +
+      '4. Follow staff instructions.\n' +
+      '5. Have fun.',
+  };
+
   try {
-    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    ensureDataFiles();
+
+    const raw = fs.readFileSync(RULES_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+
+    return {
+      title: safeString(parsed.title, fallback.title),
+      text: safeString(parsed.text, fallback.text),
+    };
   } catch (error) {
-    console.error(`Failed to read ${filePath}:`, error);
+    console.error('Failed to read rules file:', error);
     return fallback;
   }
 }
 
-function saveJson(filePath, data) {
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+function saveRulesData(data) {
+  try {
+    ensureDataFiles();
+
+    fs.writeFileSync(
+      RULES_FILE,
+      JSON.stringify(
+        {
+          title: safeString(data.title, 'Server Rules'),
+          text: safeString(data.text, ''),
+        },
+        null,
+        2
+      ),
+      'utf8'
+    );
+
+    return true;
+  } catch (error) {
+    console.error('Failed to save rules file:', error);
+    return false;
+  }
 }
 
-function getRules() {
-  const data = loadJson(RULES_FILE, DEFAULT_RULES);
-  return {
-    title: safeText(data.title, DEFAULT_RULES.title),
-    text: safeText(data.text, DEFAULT_RULES.text),
-  };
-}
-
-function saveRules(title, text) {
-  saveJson(RULES_FILE, {
-    title: safeText(title, DEFAULT_RULES.title),
-    text: safeText(text, DEFAULT_RULES.text),
-  });
-}
-
-function getStatusState() {
-  return loadJson(STATUS_STATE_FILE, { channelId: null, messageId: null });
-}
-
-function saveStatusState(state) {
-  saveJson(STATUS_STATE_FILE, state);
-}
-
-function buildRulesEmbed() {
-  const rules = getRules();
-
+function buildRulesEmbed(title, text) {
   return new EmbedBuilder()
     .setColor(0x111111)
-    .setTitle(`📜 ${rules.title}`)
-    .setDescription(rules.text)
-    .setFooter({ text: `${CONFIG.serverName} • Rules` })
-    .setTimestamp();
+    .setTitle(`📜 ${title}`)
+    .setDescription(text)
+    .setFooter({ text: `${CONFIG.serverName} • Rules Panel` });
+}
+
+function buildDefaultRulesEmbed() {
+  const rules = getRulesData();
+  return buildRulesEmbed(rules.title, rules.text);
 }
 
 function buildSuggestionPanel() {
   const embed = new EmbedBuilder()
-    .setColor(0x1f2937)
-    .setTitle('💡 Submit a Suggestion')
+    .setColor(0x111111)
+    .setTitle('📝 Suggestion Panel')
     .setDescription(
-      'Have an idea that could improve the server?\n\n' +
-        'Use the button below to send feedback, feature ideas, balance changes, event ideas, or bug reports.'
+      'Have an idea for the server?\n\n' +
+        'Click the button below to submit a suggestion for features, balancing, events, fixes, or improvements.'
     )
     .addFields(
       {
         name: 'Examples',
-        value: '• New events\n• Balance changes\n• Economy ideas\n• Quality-of-life fixes\n• Bug reports',
+        value:
+          '• New features\n' +
+          '• Base building changes\n' +
+          '• Raiding changes\n' +
+          '• PvP balancing\n' +
+          '• Bug fixes',
       },
       {
-        name: 'What happens next?',
-        value: 'Your suggestion is sent to Trello if it is configured. A log entry can also be sent to your log channel.',
+        name: 'How it works',
+        value:
+          'Press the button, fill out the form, and the suggestion will be sent to the Trello board.',
       }
     )
     .setFooter({ text: `${CONFIG.serverName} • Suggestions` });
 
   const button = new ButtonBuilder()
-    .setCustomId(SUGGESTION_BUTTON_ID)
-    .setLabel('Open Suggestion Form')
+    .setCustomId(PANEL_BUTTON_ID)
+    .setLabel('Submit Suggestion')
     .setStyle(ButtonStyle.Success);
 
   return {
@@ -159,99 +184,96 @@ function buildSuggestionModal() {
     .setCustomId(SUGGESTION_MODAL_ID)
     .setTitle('Submit a Suggestion');
 
-  const title = new TextInputBuilder()
+  const titleInput = new TextInputBuilder()
     .setCustomId('title')
-    .setLabel('Title')
+    .setLabel('Suggestion Title')
     .setStyle(TextInputStyle.Short)
     .setRequired(true)
     .setMaxLength(100)
-    .setPlaceholder('Example: Add a weekend PvP event');
+    .setPlaceholder('Example: New event zone');
 
-  const category = new TextInputBuilder()
+  const categoryInput = new TextInputBuilder()
     .setCustomId('category')
     .setLabel('Category')
     .setStyle(TextInputStyle.Short)
     .setRequired(false)
     .setMaxLength(100)
-    .setPlaceholder('Example: PvP, Events, Loot, Economy');
+    .setPlaceholder('Example: PvP, Raiding, Base Building');
 
-  const description = new TextInputBuilder()
+  const descriptionInput = new TextInputBuilder()
     .setCustomId('description')
     .setLabel('Description')
     .setStyle(TextInputStyle.Paragraph)
     .setRequired(true)
     .setMaxLength(1500)
-    .setPlaceholder('Explain your idea in detail.');
+    .setPlaceholder('Explain your suggestion in detail');
 
   modal.addComponents(
-    new ActionRowBuilder().addComponents(title),
-    new ActionRowBuilder().addComponents(category),
-    new ActionRowBuilder().addComponents(description)
+    new ActionRowBuilder().addComponents(titleInput),
+    new ActionRowBuilder().addComponents(categoryInput),
+    new ActionRowBuilder().addComponents(descriptionInput)
   );
 
   return modal;
 }
 
-function buildSuggestionSuccessEmbed(cardUrl) {
-  const embed = new EmbedBuilder()
+function buildSuggestionSuccessEmbed() {
+  return new EmbedBuilder()
     .setColor(0x22c55e)
     .setTitle('✅ Suggestion Submitted')
-    .setDescription('Your suggestion was received successfully.')
-    .setFooter({ text: `${CONFIG.serverName} • Suggestions` })
-    .setTimestamp();
-
-  if (cardUrl) {
-    embed.addFields({ name: 'Trello Card', value: `[Open Card](${cardUrl})` });
-  } else if (CONFIG.trelloBoardUrl) {
-    embed.addFields({ name: 'Suggestion Board', value: `[Open Board](${CONFIG.trelloBoardUrl})` });
-  }
-
-  return embed;
+    .setDescription(
+      'Your suggestion was sent successfully.\n\n' +
+        'You can track progress and updates on the Trello board.'
+    )
+    .addFields({
+      name: 'Trello Board',
+      value: `[Open Board](${CONFIG.trelloBoardUrl})`,
+    })
+    .setFooter({ text: `${CONFIG.serverName} • Suggestions` });
 }
 
 function buildWelcomeEmbed(member) {
   const embed = new EmbedBuilder()
-    .setColor(0x0f172a)
-    .setTitle(`👋 Welcome to ${CONFIG.serverName}`)
+    .setColor(0x0f0f0f)
+    .setTitle(`Welcome to ${CONFIG.serverName}`)
     .setDescription(
       `Welcome ${member}!\n\n` +
-        'Please read the rules, choose your roles, and enjoy your stay.'
+        'You are now verified and ready to join the community.\n' +
+        'Please read the rules, stay respectful, and have fun.'
     )
     .setThumbnail(member.user.displayAvatarURL({ extension: 'png' }))
     .setFooter({ text: CONFIG.serverName })
     .setTimestamp();
 
-  if (CONFIG.welcomeImageUrl) {
+  if (safeString(CONFIG.welcomeImageUrl)) {
     embed.setImage(CONFIG.welcomeImageUrl);
   }
 
   return embed;
 }
 
-function mapMissingPermissions(channel, me) {
+function getMissingChannelPermissions(channel, me) {
   const perms = channel.permissionsFor(me);
   if (!perms) return ['ViewChannel', 'SendMessages', 'EmbedLinks'];
 
   const missing = [];
-  if (!perms.has(PermissionsBitField.Flags.ViewChannel)) missing.push('ViewChannel');
-  if (!perms.has(PermissionsBitField.Flags.SendMessages)) missing.push('SendMessages');
-  if (!perms.has(PermissionsBitField.Flags.EmbedLinks)) missing.push('EmbedLinks');
+
+  if (!perms.has(PermissionsBitField.Flags.ViewChannel)) {
+    missing.push('ViewChannel');
+  }
+
+  if (!perms.has(PermissionsBitField.Flags.SendMessages)) {
+    missing.push('SendMessages');
+  }
+
+  if (!perms.has(PermissionsBitField.Flags.EmbedLinks)) {
+    missing.push('EmbedLinks');
+  }
+
   return missing;
 }
 
-async function replyError(interaction, message) {
-  if (interaction.deferred || interaction.replied) {
-    await interaction.editReply({ content: message, embeds: [], components: [] }).catch(() => null);
-  } else {
-    await interaction.reply({ content: message, ephemeral: true }).catch(() => null);
-  }
-}
-
-async function fetchTrelloListId() {
-  if (!CONFIG.trelloKey || !CONFIG.trelloToken || !CONFIG.trelloBoardShortlink) {
-    return null;
-  }
-
+async function findTrelloListId() {
   const response = await axios.get(
     `https://api.trello.com/1/boards/${CONFIG.trelloBoardShortlink}/lists`,
     {
@@ -263,28 +285,28 @@ async function fetchTrelloListId() {
     }
   );
 
-  const list = response.data.find((entry) => {
-    return entry.name.toLowerCase() === CONFIG.trelloTargetListName.toLowerCase();
-  });
+  const list = response.data.find(
+    item =>
+      item.name.toLowerCase() === CONFIG.trelloTargetListName.toLowerCase()
+  );
 
   if (!list) {
-    throw new Error(`Trello list not found: ${CONFIG.trelloTargetListName}`);
+    throw new Error(`Trello list "${CONFIG.trelloTargetListName}" was not found.`);
   }
 
   return list.id;
 }
 
-async function createTrelloSuggestionCard({ userTag, userId, guildName, title, category, description }) {
-  const listId = await fetchTrelloListId();
-  if (!listId) return null;
+async function createSuggestionCard(data) {
+  const listId = await findTrelloListId();
 
   const desc = [
-    `User: ${userTag}`,
-    `User ID: ${userId}`,
-    `Server: ${guildName}`,
-    `Category: ${category || 'Uncategorized'}`,
+    `User: ${data.user}`,
+    `User ID: ${data.userId}`,
+    `Server: ${data.guild}`,
+    `Category: ${data.category}`,
     '',
-    description,
+    data.description,
   ].join('\n');
 
   const response = await axios.post('https://api.trello.com/1/cards', null, {
@@ -292,7 +314,7 @@ async function createTrelloSuggestionCard({ userTag, userId, guildName, title, c
       key: CONFIG.trelloKey,
       token: CONFIG.trelloToken,
       idList: listId,
-      name: title,
+      name: data.title,
       desc,
     },
     timeout: 15000,
@@ -301,220 +323,172 @@ async function createTrelloSuggestionCard({ userTag, userId, guildName, title, c
   return response.data;
 }
 
-async function sendLogEmbed(guild, embed) {
-  if (!CONFIG.logChannelId || !guild) return;
-  const channel = await guild.channels.fetch(CONFIG.logChannelId).catch(() => null);
-  if (!channel || !channel.isTextBased()) return;
-  await channel.send({ embeds: [embed] }).catch(() => null);
-}
+async function sendSuggestionLog(interaction, title, category, description, cardUrl) {
+  if (!CONFIG.logChannelId || !interaction.guild) return;
 
-async function logSuggestion(interaction, { title, category, description, cardUrl }) {
+  const channel = await interaction.guild.channels
+    .fetch(CONFIG.logChannelId)
+    .catch(() => null);
+
+  if (!channel || !channel.isTextBased()) return;
+
   const embed = new EmbedBuilder()
     .setColor(0x2563eb)
     .setTitle('New Suggestion')
     .addFields(
-      { name: 'User', value: `${interaction.user.tag} (${interaction.user.id})` },
-      { name: 'Title', value: title, inline: true },
-      { name: 'Category', value: category || 'Uncategorized', inline: true },
-      { name: 'Description', value: description.slice(0, 1024) }
-    )
-    .setTimestamp();
-
-  if (cardUrl) {
-    embed.addFields({ name: 'Trello Card', value: cardUrl });
-  }
-
-  await sendLogEmbed(interaction.guild, embed);
-}
-
-function formatStatusValue(label, value) {
-  return `**${label}:** ${value}`;
-}
-
-async function fetchServerStatus() {
-  if (!CONFIG.cftoolsServerId || !CONFIG.cftoolsApiToken) {
-    return {
-      configured: false,
-      online: false,
-      serverName: CONFIG.serverName,
-      players: 'Not configured',
-      queue: 'Not configured',
-      map: 'Unknown',
-      ip: 'Unknown',
-      game: 'Unknown',
-      time: new Date().toISOString(),
-    };
-  }
-
-  const response = await axios.get(
-    `https://data.cftools.cloud/v1/server/${CONFIG.cftoolsServerId}`,
-    {
-      headers: {
-        Authorization: `Bearer ${CONFIG.cftoolsApiToken}`,
+      {
+        name: 'User',
+        value: `${interaction.user.tag} (${interaction.user.id})`,
       },
-      timeout: 15000,
-    }
-  );
-
-  const payload = response.data;
-  const server = payload.server || payload.data || payload;
-  const status = server.status || {};
-
-  return {
-    configured: true,
-    online: Boolean(status.online ?? server.online ?? false),
-    serverName: server.name || CONFIG.serverName,
-    players:
-      typeof status.players === 'number' && typeof status.maxPlayers === 'number'
-        ? `${status.players}/${status.maxPlayers}`
-        : (server.players ? `${server.players}` : 'Unknown'),
-    queue:
-      typeof status.queue === 'number'
-        ? `${status.queue}`
-        : typeof server.queue === 'number'
-          ? `${server.queue}`
-          : '0',
-    map: status.map || server.map || 'Unknown',
-    ip: status.ip || server.ip || 'Unknown',
-    game: server.game || 'DayZ',
-    time: new Date().toISOString(),
-  };
-}
-
-function buildStatusEmbed(status) {
-  const onlineText = status.online ? 'Online' : 'Offline';
-  const color = status.online ? 0x16a34a : 0xdc2626;
-
-  return new EmbedBuilder()
-    .setColor(color)
-    .setTitle(`📡 ${CONFIG.statusPanelTitle}`)
-    .setDescription(
-      [
-        formatStatusValue('Server', status.serverName),
-        formatStatusValue('Status', onlineText),
-        formatStatusValue('Players', status.players),
-        formatStatusValue('Queue', status.queue),
-        formatStatusValue('Map', status.map),
-        formatStatusValue('IP', status.ip),
-        formatStatusValue('Game', status.game),
-        formatStatusValue('Last Update', `<t:${Math.floor(new Date(status.time).getTime() / 1000)}:R>`),
-      ].join('\n')
+      {
+        name: 'Category',
+        value: category || 'None',
+        inline: true,
+      },
+      {
+        name: 'Title',
+        value: title,
+        inline: true,
+      },
+      {
+        name: 'Description',
+        value: description.slice(0, 1024),
+      },
+      {
+        name: 'Trello Card',
+        value: cardUrl || 'Created',
+      }
     )
-    .setFooter({ text: `${CONFIG.serverName} • Live Status` })
     .setTimestamp();
+
+  await channel.send({ embeds: [embed] });
 }
 
-async function createOrUpdateStatusPanel(channel) {
-  const status = await fetchServerStatus();
-  const embed = buildStatusEmbed(status);
-  const state = getStatusState();
-
-  let message = null;
-
-  if (state.messageId && state.channelId) {
-    const savedChannel = await client.channels.fetch(state.channelId).catch(() => null);
-    if (savedChannel && savedChannel.isTextBased()) {
-      message = await savedChannel.messages.fetch(state.messageId).catch(() => null);
-    }
+async function replyWithError(interaction, content) {
+  if (interaction.deferred || interaction.replied) {
+    await interaction.editReply({
+      content,
+      embeds: [],
+      components: [],
+    }).catch(() => null);
+    return;
   }
 
-  if (!message && channel) {
-    message = await channel.send({ embeds: [embed] });
-    saveStatusState({ channelId: channel.id, messageId: message.id });
-    return { created: true, message };
-  }
-
-  if (message) {
-    await message.edit({ embeds: [embed] });
-    return { created: false, message };
-  }
-
-  throw new Error('No saved status panel message was found. Run /statuspanel first.');
-}
-
-async function refreshStatusPanelSilently() {
-  const state = getStatusState();
-  if (!state.channelId || !state.messageId) return;
-
-  const channel = await client.channels.fetch(state.channelId).catch(() => null);
-  if (!channel || !channel.isTextBased()) return;
-
-  try {
-    await createOrUpdateStatusPanel(channel);
-  } catch (error) {
-    console.error('Automatic status refresh failed:', error.message);
-  }
+  await interaction.reply({
+    content,
+    flags: MessageFlags.Ephemeral,
+  }).catch(() => null);
 }
 
 client.once(Events.ClientReady, () => {
   ensureDataFiles();
   console.log(`Logged in as ${client.user.tag}`);
-  try {
-  client.user.setActivity(CONFIG.serverName, { type: ActivityType.Watching });
-} catch (error) {
-  console.error('Failed to set bot activity:', error);
-}
 
-  setInterval(() => {
-    refreshStatusPanelSilently();
-  }, 60_000);
+  try {
+    client.user.setActivity(CONFIG.serverName, { type: ActivityType.Watching });
+  } catch (error) {
+    console.error('Failed to set bot activity:', error);
+  }
 });
 
-client.on(Events.InteractionCreate, async (interaction) => {
+client.on(Events.InteractionCreate, async interaction => {
   try {
     if (interaction.isChatInputCommand()) {
-      if (interaction.commandName === 'rules') {
-        await interaction.reply({ embeds: [buildRulesEmbed()] });
+      if (interaction.commandName === 'rules' || interaction.commandName === 'serverrules') {
+        await interaction.reply({
+          embeds: [buildDefaultRulesEmbed()],
+        });
+        return;
+      }
+
+      if (interaction.commandName === 'setrules' || interaction.commandName === 'setserverrules') {
+        const title = interaction.options.getString('title') || 'Server Rules';
+        const text = interaction.options.getString('text');
+
+        const success = saveRulesData({ title, text });
+
+        if (!success) {
+          await interaction.reply({
+            content: '❌ Failed to update the default rules.',
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        await interaction.reply({
+          content: '✅ Default rules updated successfully.',
+          flags: MessageFlags.Ephemeral,
+        });
         return;
       }
 
       if (interaction.commandName === 'rulespanel') {
         const channel = interaction.options.getChannel('channel');
-        const me = interaction.guild?.members?.me;
-        const missing = me ? mapMissingPermissions(channel, me) : ['Unknown'];
+        const title = interaction.options.getString('title');
+        const text = interaction.options.getString('text');
 
-        if (missing.length) {
+        if (!channel || !channel.isTextBased()) {
           await interaction.reply({
-            content: `I cannot send the rules panel in ${channel}. Missing permissions: ${missing.join(', ')}`,
-            ephemeral: true,
+            content: 'Please select a valid text channel.',
+            flags: MessageFlags.Ephemeral,
           });
           return;
         }
 
-        await channel.send({ embeds: [buildRulesEmbed()] });
-        await interaction.reply({ content: `Rules panel sent to ${channel}.`, ephemeral: true });
-        return;
-      }
+        const me = interaction.guild?.members?.me;
+        const missing = me ? getMissingChannelPermissions(channel, me) : ['Unknown'];
 
-      if (interaction.commandName === 'setrules') {
-        const text = interaction.options.getString('text', true);
-        const title = interaction.options.getString('title') || 'Server Rules';
+        if (missing.length) {
+          await interaction.reply({
+            content:
+              `I cannot send the rules panel to ${channel}.\n` +
+              `Missing permissions: ${missing.join(', ')}`,
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
 
-        saveRules(title, text);
+        await channel.send({
+          embeds: [buildRulesEmbed(title, text)],
+        });
 
         await interaction.reply({
-          content: 'Rules updated successfully.',
-          embeds: [buildRulesEmbed()],
-          ephemeral: true,
+          content: `✅ Custom rules panel sent to ${channel}.`,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
 
       if (interaction.commandName === 'ticketpanel') {
         const channel = interaction.options.getChannel('channel');
+
+        if (!channel || !channel.isTextBased()) {
+          await interaction.reply({
+            content: 'Please select a valid text channel.',
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
         const me = interaction.guild?.members?.me;
-        const missing = me ? mapMissingPermissions(channel, me) : ['Unknown'];
+        const missing = me ? getMissingChannelPermissions(channel, me) : ['Unknown'];
 
         if (missing.length) {
           await interaction.reply({
-            content: `I cannot send the suggestion panel in ${channel}. Missing permissions: ${missing.join(', ')}`,
-            ephemeral: true,
+            content:
+              `I cannot send the suggestion panel to ${channel}.\n` +
+              `Missing permissions: ${missing.join(', ')}`,
+            flags: MessageFlags.Ephemeral,
           });
           return;
         }
 
         await channel.send(buildSuggestionPanel());
-        await interaction.reply({ content: `Suggestion panel sent to ${channel}.`, ephemeral: true });
+
+        await interaction.reply({
+          content: `✅ Suggestion panel sent to ${channel}.`,
+          flags: MessageFlags.Ephemeral,
+        });
         return;
       }
 
@@ -522,94 +496,84 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await interaction.showModal(buildSuggestionModal());
         return;
       }
-
-      if (interaction.commandName === 'statuspanel') {
-        await interaction.deferReply({ ephemeral: true });
-
-        const channel = interaction.options.getChannel('channel', true);
-        const me = interaction.guild?.members?.me;
-        const missing = me ? mapMissingPermissions(channel, me) : ['Unknown'];
-
-        if (missing.length) {
-          await interaction.editReply(
-            `I cannot send the status panel in ${channel}. Missing permissions: ${missing.join(', ')}`
-          );
-          return;
-        }
-
-        saveStatusState({ channelId: channel.id, messageId: null });
-        const result = await createOrUpdateStatusPanel(channel);
-        saveStatusState({ channelId: channel.id, messageId: result.message.id });
-
-        await interaction.editReply(
-          result.created
-            ? `Status panel created in ${channel}.`
-            : `Status panel updated in ${channel}.`
-        );
-        return;
-      }
-
-      if (interaction.commandName === 'refreshstatus') {
-        await interaction.deferReply({ ephemeral: true });
-        const state = getStatusState();
-
-        if (!state.channelId) {
-          await interaction.editReply('No status panel has been created yet. Run /statuspanel first.');
-          return;
-        }
-
-        const channel = await client.channels.fetch(state.channelId).catch(() => null);
-        if (!channel || !channel.isTextBased()) {
-          await interaction.editReply('The saved status channel no longer exists or is not a text channel.');
-          return;
-        }
-
-        const result = await createOrUpdateStatusPanel(channel);
-        saveStatusState({ channelId: channel.id, messageId: result.message.id });
-        await interaction.editReply('Status panel refreshed.');
-        return;
-      }
     }
 
-    if (interaction.isButton() && interaction.customId === SUGGESTION_BUTTON_ID) {
+    if (interaction.isButton() && interaction.customId === PANEL_BUTTON_ID) {
       await interaction.showModal(buildSuggestionModal());
       return;
     }
 
-    if (interaction.isModalSubmit() && interaction.customId === SUGGESTION_MODAL_ID) {
-      await interaction.deferReply({ ephemeral: true });
+    if (
+      interaction.type === InteractionType.ModalSubmit &&
+      interaction.customId === SUGGESTION_MODAL_ID
+    ) {
+      await interaction.deferReply({
+        flags: MessageFlags.Ephemeral,
+      });
 
-      const title = safeText(interaction.fields.getTextInputValue('title'), 'Untitled Suggestion');
-      const category = safeText(interaction.fields.getTextInputValue('category'), 'Uncategorized');
-      const description = safeText(interaction.fields.getTextInputValue('description'), 'No description provided.');
+      if (
+        !CONFIG.trelloKey ||
+        !CONFIG.trelloToken ||
+        !CONFIG.trelloBoardShortlink
+      ) {
+        await interaction.editReply({
+          content:
+            'The suggestion system is not configured yet. Please contact an administrator.',
+        });
+        return;
+      }
 
-      let card = null;
+      const title = safeString(
+        interaction.fields.getTextInputValue('title'),
+        'No title'
+      );
+      const category = safeString(
+        interaction.fields.getTextInputValue('category'),
+        'None'
+      );
+      const description = safeString(
+        interaction.fields.getTextInputValue('description'),
+        'No description'
+      );
+
       try {
-        card = await createTrelloSuggestionCard({
-          userTag: interaction.user.tag,
-          userId: interaction.user.id,
-          guildName: interaction.guild?.name || 'Unknown Server',
+        const card = await createSuggestionCard({
           title,
           category,
           description,
+          user: interaction.user.tag,
+          userId: interaction.user.id,
+          guild: interaction.guild?.name || 'Unknown',
+        });
+
+        try {
+          await sendSuggestionLog(
+            interaction,
+            title,
+            category,
+            description,
+            card.shortUrl
+          );
+        } catch (logError) {
+          console.error('Suggestion log error:', logError);
+        }
+
+        await interaction.editReply({
+          embeds: [buildSuggestionSuccessEmbed()],
         });
       } catch (error) {
-        console.error('Trello submission failed:', error.message);
+        console.error('Suggestion submit error:', error);
+        await interaction.editReply({
+          content:
+            '❌ Failed to submit the suggestion. Please try again later.',
+        });
       }
 
-      await logSuggestion(interaction, {
-        title,
-        category,
-        description,
-        cardUrl: card?.shortUrl || '',
-      });
-
-      await interaction.editReply({ embeds: [buildSuggestionSuccessEmbed(card?.shortUrl || '')] });
       return;
     }
   } catch (error) {
     console.error('Interaction error:', error);
-    await replyError(interaction, 'Something went wrong while processing that command.');
+    await replyWithError(interaction, 'Something went wrong. Please try again.');
   }
 });
 
@@ -617,19 +581,28 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
   try {
     if (!CONFIG.verifiedRoleId || !CONFIG.welcomeChannelId) return;
 
-    const hadVerifiedRole = oldMember.roles.cache.has(CONFIG.verifiedRoleId);
-    const hasVerifiedRole = newMember.roles.cache.has(CONFIG.verifiedRoleId);
+    const hadRole = oldMember.roles.cache.has(CONFIG.verifiedRoleId);
+    const hasRoleNow = newMember.roles.cache.has(CONFIG.verifiedRoleId);
 
-    if (hadVerifiedRole || !hasVerifiedRole) return;
+    if (!hadRole && hasRoleNow) {
+      const channel = await newMember.guild.channels
+        .fetch(CONFIG.welcomeChannelId)
+        .catch(() => null);
 
-    const channel = await newMember.guild.channels.fetch(CONFIG.welcomeChannelId).catch(() => null);
-    if (!channel || !channel.isTextBased()) return;
+      if (!channel || !channel.isTextBased()) return;
 
-    await channel.send({ embeds: [buildWelcomeEmbed(newMember)] });
+      await channel.send({
+        embeds: [buildWelcomeEmbed(newMember)],
+      });
+    }
   } catch (error) {
-    console.error('Welcome handler error:', error);
+    console.error('Welcome error:', error);
   }
 });
 
-ensureDataFiles();
-client.login(process.env.DISCORD_TOKEN);
+if (!CONFIG.token) {
+  console.error('Missing DISCORD_TOKEN in environment variables.');
+  process.exit(1);
+}
+
+client.login(CONFIG.token);
