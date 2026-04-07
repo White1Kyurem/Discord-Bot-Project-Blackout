@@ -1,5 +1,7 @@
 require('dotenv').config();
 
+const fs = require('fs');
+const path = require('path');
 const axios = require('axios');
 const {
   Client,
@@ -35,11 +37,59 @@ const {
 
 const PANEL_BUTTON_ID = 'open_suggestion_modal';
 const SUGGESTION_MODAL_ID = 'suggestion_modal';
+const RULES_FILE = path.join(__dirname, 'rules.json');
 
 function safe(value, fallback = '') {
   if (!value || typeof value !== 'string') return fallback;
   const trimmed = value.trim();
   return trimmed.length ? trimmed : fallback;
+}
+
+function getRulesData() {
+  try {
+    if (!fs.existsSync(RULES_FILE)) {
+      return {
+        title: 'Server Rules',
+        text:
+          '1. Respect all players.\n' +
+          '2. No cheating or exploiting.\n' +
+          '3. No abusive language.\n' +
+          '4. Follow staff instructions.\n' +
+          '5. Have fun.',
+      };
+    }
+
+    return JSON.parse(fs.readFileSync(RULES_FILE, 'utf8'));
+  } catch (error) {
+    console.error('Failed to read rules file:', error);
+    return {
+      title: 'Server Rules',
+      text:
+        '1. Respect all players.\n' +
+        '2. No cheating or exploiting.\n' +
+        '3. No abusive language.\n' +
+        '4. Follow staff instructions.\n' +
+        '5. Have fun.',
+    };
+  }
+}
+
+function saveRulesData(data) {
+  try {
+    fs.writeFileSync(RULES_FILE, JSON.stringify(data, null, 2), 'utf8');
+  } catch (error) {
+    console.error('Failed to save rules file:', error);
+  }
+}
+
+function buildRulesEmbed() {
+  const rules = getRulesData();
+
+  return new EmbedBuilder()
+    .setColor(0x111111)
+    .setTitle(`📜 ${rules.title}`)
+    .setDescription(rules.text)
+    .setFooter({ text: 'Project Blackout PVP • Server Rules' });
 }
 
 function buildSuggestionPanel() {
@@ -48,7 +98,7 @@ function buildSuggestionPanel() {
     .setTitle('📝 Project Blackout Suggestions')
     .setDescription(
       'Have an idea for the server?\n\n' +
-      'Use the button below to submit a suggestion for new features, balancing, events, fixes, or improvements.'
+        'Use the button below to submit a suggestion for new features, balancing, events, fixes, or improvements.'
     )
     .addFields(
       {
@@ -190,10 +240,10 @@ function buildWelcomeEmbed(member) {
     .setTitle('🛡️ Welcome to Project Blackout PVP')
     .setDescription(
       `Welcome ${member} to **Project Blackout PVP**!\n\n` +
-      `⚔️ Prepare for intense battles\n` +
-      `🧟 Survive the darkness\n` +
-      `🔥 Build your legacy\n\n` +
-      `We are glad to have you here. Stay sharp.`
+        `⚔️ Prepare for intense battles\n` +
+        `🧟 Survive the darkness\n` +
+        `🔥 Build your legacy\n\n` +
+        `We are glad to have you here. Stay sharp.`
     )
     .setThumbnail(member.user.displayAvatarURL({ extension: 'png' }))
     .setFooter({ text: 'Project Blackout PVP' })
@@ -212,7 +262,7 @@ function buildSuggestionSuccessEmbed() {
     .setTitle('✅ Suggestion Submitted')
     .setDescription(
       'Your suggestion has been successfully sent to our Trello board.\n\n' +
-      'You can track all suggestions, updates, and current work below.'
+        'You can track all suggestions, updates, and current work below.'
     )
     .addFields({
       name: 'View all suggestions',
@@ -283,6 +333,63 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       if (interaction.commandName === 'suggestion') {
         await interaction.showModal(buildSuggestionModal());
+        return;
+      }
+
+      if (interaction.commandName === 'rulespanel') {
+        const channel = interaction.channel;
+
+        if (!channel || !channel.isTextBased()) {
+          await interaction.reply({
+            content: 'This command can only be used in a normal text channel.',
+            ephemeral: true,
+          });
+          return;
+        }
+
+        const me = interaction.guild?.members?.me;
+        const missing = me ? getMissingChannelPermissions(channel, me) : ['Unknown'];
+
+        if (missing.length) {
+          await interaction.reply({
+            content:
+              `I cannot send the rules panel in this channel.\n` +
+              `Missing permissions: ${missing.join(', ')}`,
+            ephemeral: true,
+          });
+          return;
+        }
+
+        await channel.send({ embeds: [buildRulesEmbed()] });
+        await interaction.reply({
+          content: 'Rules panel sent.',
+          ephemeral: true,
+        });
+        return;
+      }
+
+      if (interaction.commandName === 'setrules') {
+        await interaction.deferReply({ ephemeral: true });
+
+        try {
+          const title = interaction.options.getString('title') || 'Server Rules';
+          const text = interaction.options.getString('text');
+
+          saveRulesData({
+            title,
+            text,
+          });
+
+          await interaction.editReply({
+            content: 'Rules updated successfully.',
+          });
+        } catch (error) {
+          console.error('Set rules error:', error);
+          await interaction.editReply({
+            content: 'Failed to update the rules.',
+          });
+        }
+
         return;
       }
     }
