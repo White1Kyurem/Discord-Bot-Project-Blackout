@@ -17,30 +17,6 @@ const commands = [
     .setDescription('Show the default server rules'),
 
   new SlashCommandBuilder()
-    .setName('rulespanel')
-    .setDescription('Send a custom rules panel to a channel')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-    .addChannelOption(option =>
-      option
-        .setName('channel')
-        .setDescription('Select the channel')
-        .addChannelTypes(ChannelType.GuildText)
-        .setRequired(true)
-    )
-    .addStringOption(option =>
-      option
-        .setName('title')
-        .setDescription('The title of the rules panel')
-        .setRequired(true)
-    )
-    .addStringOption(option =>
-      option
-        .setName('text')
-        .setDescription('The rules text for this panel')
-        .setRequired(true)
-    ),
-
-  new SlashCommandBuilder()
     .setName('setrules')
     .setDescription('Set or update the default server rules')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
@@ -72,6 +48,18 @@ const commands = [
         .setName('title')
         .setDescription('Optional default embed title')
         .setRequired(false)
+    ),
+
+  new SlashCommandBuilder()
+    .setName('rulespanel')
+    .setDescription('Open a form to create a custom rules panel')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addChannelOption(option =>
+      option
+        .setName('channel')
+        .setDescription('Select the channel')
+        .addChannelTypes(ChannelType.GuildText)
+        .setRequired(true)
     ),
 
   new SlashCommandBuilder()
