@@ -449,7 +449,11 @@ async function refreshStatusPanelSilently() {
 client.once(Events.ClientReady, () => {
   ensureDataFiles();
   console.log(`Logged in as ${client.user.tag}`);
-  client.user.setActivity(CONFIG.serverName, { type: ActivityType.Watching }).catch(() => null);
+  try {
+  client.user.setActivity(CONFIG.serverName, { type: ActivityType.Watching });
+} catch (error) {
+  console.error('Failed to set bot activity:', error);
+}
 
   setInterval(() => {
     refreshStatusPanelSilently();
