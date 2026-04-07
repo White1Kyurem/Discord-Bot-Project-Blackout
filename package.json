@@ -1,0 +1,16 @@
+{
+  "name": "project-blackout-discord-bot",
+  "version": "2.0.0",
+  "description": "Discord bot for Project Blackout with rules, suggestions, welcome messages, and optional CFTools status panel.",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node index.js",
+    "deploy": "node deploy-commands.js"
+  },
+  "dependencies": {
+    "axios": "^1.8.4",
+    "discord.js": "^14.19.3",
+    "dotenv": "^16.4.7"
+  }
+}
