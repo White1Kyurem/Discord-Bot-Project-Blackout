@@ -45,6 +45,7 @@ const RULES_FILE = path.join(DATA_DIR, 'rules.json');
 
 const PANEL_BUTTON_ID = 'open_suggestion_modal';
 const SUGGESTION_MODAL_ID = 'suggestion_modal';
+const RULES_MODAL_PREFIX = 'rules_modal_';
 
 function ensureDataFiles() {
   if (!fs.existsSync(DATA_DIR)) {
@@ -76,6 +77,29 @@ function safeString(value, fallback = '') {
   if (typeof value !== 'string') return fallback;
   const trimmed = value.trim();
   return trimmed.length ? trimmed : fallback;
+}
+
+function clampText(text, maxLength) {
+  if (!text) return '';
+  return text.length > maxLength ? text.slice(0, maxLength) : text;
+}
+
+function parseHexColor(input) {
+  const raw = safeString(input, '').replace('#', '').trim();
+
+  if (!raw) return 0x111111;
+  if (!/^[0-9a-fA-F]{6}$/.test(raw)) return 0x111111;
+
+  return parseInt(raw, 16);
+}
+
+function normalizeHexColor(input) {
+  const raw = safeString(input, '').replace('#', '').trim();
+
+  if (!raw) return '#111111';
+  if (!/^[0-9a-fA-F]{6}$/.test(raw)) return '#111111';
+
+  return `#${raw.toUpperCase()}`;
 }
 
 function getRulesData() {
@@ -129,17 +153,65 @@ function saveRulesData(data) {
   }
 }
 
-function buildRulesEmbed(title, text) {
-  return new EmbedBuilder()
-    .setColor(0x111111)
-    .setTitle(`📜 ${title}`)
-    .setDescription(text)
-    .setFooter({ text: `${CONFIG.serverName} • Rules Panel` });
+function splitTextIntoChunks(text, maxLength = 4000) {
+  const lines = text.split('\n');
+  const chunks = [];
+  let current = '';
+
+  for (const line of lines) {
+    const next = current ? `${current}\n${line}` : line;
+
+    if (next.length <= maxLength) {
+      current = next;
+      continue;
+    }
+
+    if (current) {
+      chunks.push(current);
+      current = '';
+    }
+
+    if (line.length <= maxLength) {
+      current = line;
+      continue;
+    }
+
+    let remaining = line;
+    while (remaining.length > maxLength) {
+      chunks.push(remaining.slice(0, maxLength));
+      remaining = remaining.slice(maxLength);
+    }
+    current = remaining;
+  }
+
+  if (current) {
+    chunks.push(current);
+  }
+
+  return chunks.length ? chunks : ['No content provided.'];
 }
 
-function buildDefaultRulesEmbed() {
+function buildRulesEmbeds(title, text, colorInput) {
+  const color = parseHexColor(colorInput);
+  const normalizedColor = normalizeHexColor(colorInput);
+  const chunks = splitTextIntoChunks(text, 4000);
+
+  return chunks.map((chunk, index) => {
+    const embed = new EmbedBuilder()
+      .setColor(color)
+      .setTitle(index === 0 ? `📜 ${title}` : `📜 ${title} (${index + 1})`)
+      .setDescription(chunk)
+      .setFooter({
+        text: `${CONFIG.serverName} • Rules Panel • ${normalizedColor}`,
+      });
+
+    return embed;
+  });
+}
+
+function buildDefaultRulesEmbeds() {
   const rules = getRulesData();
-  return buildRulesEmbed(rules.title, rules.text);
+  return buildRulesEmbeds(rules.title, rules.text, '#111111');
 }
 
 function buildSuggestionPanel() {
@@ -217,6 +289,46 @@ function buildSuggestionModal() {
   return modal;
 }
 
+function buildRulesModal(channelId) {
+  const modal = new ModalBuilder()
+    .setCustomId(`${RULES_MODAL_PREFIX}${channelId}`)
+    .setTitle('Create Rules Panel');
+
+  const titleInput = new TextInputBuilder()
+    .setCustomId('title')
+    .setLabel('Panel Title')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setMaxLength(100)
+    .setPlaceholder('Example: Basebuilding Rules');
+
+  const colorInput = new TextInputBuilder()
+    .setCustomId('color')
+    .setLabel('Embed Color (Hex)')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false)
+    .setMaxLength(7)
+    .setPlaceholder('Example: #FF0000');
+
+  const textInput = new TextInputBuilder()
+    .setCustomId('text')
+    .setLabel('Rules Text')
+    .setStyle(TextInputStyle.Paragraph)
+    .setRequired(true)
+    .setMaxLength(4000)
+    .setPlaceholder(
+      'Write your rules here.\n\nYou can use multiple lines, empty lines, and bullet points.'
+    );
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(titleInput),
+    new ActionRowBuilder().addComponents(colorInput),
+    new ActionRowBuilder().addComponents(textInput)
+  );
+
+  return modal;
+}
+
 function buildSuggestionSuccessEmbed() {
   return new EmbedBuilder()
     .setColor(0x22c55e)
@@ -286,8 +398,7 @@ async function findTrelloListId() {
   );
 
   const list = response.data.find(
-    item =>
-      item.name.toLowerCase() === CONFIG.trelloTargetListName.toLowerCase()
+    item => item.name.toLowerCase() === CONFIG.trelloTargetListName.toLowerCase()
   );
 
   if (!list) {
@@ -352,7 +463,7 @@ async function sendSuggestionLog(interaction, title, category, description, card
       },
       {
         name: 'Description',
-        value: description.slice(0, 1024),
+        value: clampText(description, 1024),
       },
       {
         name: 'Trello Card',
@@ -396,7 +507,7 @@ client.on(Events.InteractionCreate, async interaction => {
     if (interaction.isChatInputCommand()) {
       if (interaction.commandName === 'rules' || interaction.commandName === 'serverrules') {
         await interaction.reply({
-          embeds: [buildDefaultRulesEmbed()],
+          embeds: buildDefaultRulesEmbeds(),
         });
         return;
       }
@@ -424,8 +535,6 @@ client.on(Events.InteractionCreate, async interaction => {
 
       if (interaction.commandName === 'rulespanel') {
         const channel = interaction.options.getChannel('channel');
-        const title = interaction.options.getString('title');
-        const text = interaction.options.getString('text');
 
         if (!channel || !channel.isTextBased()) {
           await interaction.reply({
@@ -448,14 +557,7 @@ client.on(Events.InteractionCreate, async interaction => {
           return;
         }
 
-        await channel.send({
-          embeds: [buildRulesEmbed(title, text)],
-        });
-
-        await interaction.reply({
-          content: `✅ Custom rules panel sent to ${channel}.`,
-          flags: MessageFlags.Ephemeral,
-        });
+        await interaction.showModal(buildRulesModal(channel.id));
         return;
       }
 
@@ -500,6 +602,61 @@ client.on(Events.InteractionCreate, async interaction => {
 
     if (interaction.isButton() && interaction.customId === PANEL_BUTTON_ID) {
       await interaction.showModal(buildSuggestionModal());
+      return;
+    }
+
+    if (
+      interaction.type === InteractionType.ModalSubmit &&
+      interaction.customId.startsWith(RULES_MODAL_PREFIX)
+    ) {
+      const channelId = interaction.customId.replace(RULES_MODAL_PREFIX, '');
+      const channel = await interaction.guild.channels.fetch(channelId).catch(() => null);
+
+      if (!channel || !channel.isTextBased()) {
+        await interaction.reply({
+          content: 'Channel not found.',
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      const me = interaction.guild?.members?.me;
+      const missing = me ? getMissingChannelPermissions(channel, me) : ['Unknown'];
+
+      if (missing.length) {
+        await interaction.reply({
+          content:
+            `I cannot send the rules panel to ${channel}.\n` +
+            `Missing permissions: ${missing.join(', ')}`,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      const title = safeString(
+        interaction.fields.getTextInputValue('title'),
+        'Rules Panel'
+      );
+      const text = safeString(
+        interaction.fields.getTextInputValue('text'),
+        'No rules text provided.'
+      );
+      const colorInput = safeString(
+        interaction.fields.getTextInputValue('color'),
+        '#111111'
+      );
+
+      const embeds = buildRulesEmbeds(title, text, colorInput);
+
+      await channel.send({ embeds });
+
+      await interaction.reply({
+        content:
+          `✅ Rules panel sent to ${channel}.\n` +
+          `Title: ${title}\n` +
+          `Color: ${normalizeHexColor(colorInput)}`,
+        flags: MessageFlags.Ephemeral,
+      });
       return;
     }
 
