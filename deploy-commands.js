@@ -10,15 +10,15 @@ require('dotenv').config();
 const commands = [
   new SlashCommandBuilder()
     .setName('rules')
-    .setDescription('Show the server rules'),
+    .setDescription('Show the default server rules'),
 
   new SlashCommandBuilder()
     .setName('serverrules')
-    .setDescription('Show the server rules'),
+    .setDescription('Show the default server rules'),
 
   new SlashCommandBuilder()
     .setName('rulespanel')
-    .setDescription('Send the rules panel to a channel')
+    .setDescription('Send a custom rules panel to a channel')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addChannelOption(option =>
       option
@@ -26,39 +26,51 @@ const commands = [
         .setDescription('Select the channel')
         .addChannelTypes(ChannelType.GuildText)
         .setRequired(true)
+    )
+    .addStringOption(option =>
+      option
+        .setName('title')
+        .setDescription('The title of the rules panel')
+        .setRequired(true)
+    )
+    .addStringOption(option =>
+      option
+        .setName('text')
+        .setDescription('The rules text for this panel')
+        .setRequired(true)
     ),
 
   new SlashCommandBuilder()
     .setName('setrules')
-    .setDescription('Set or update the server rules')
+    .setDescription('Set or update the default server rules')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addStringOption(option =>
       option
         .setName('text')
-        .setDescription('The rules text')
+        .setDescription('The default rules text')
         .setRequired(true)
     )
     .addStringOption(option =>
       option
         .setName('title')
-        .setDescription('Optional embed title')
+        .setDescription('Optional default embed title')
         .setRequired(false)
     ),
 
   new SlashCommandBuilder()
     .setName('setserverrules')
-    .setDescription('Set or update the server rules')
+    .setDescription('Set or update the default server rules')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addStringOption(option =>
       option
         .setName('text')
-        .setDescription('The rules text')
+        .setDescription('The default rules text')
         .setRequired(true)
     )
     .addStringOption(option =>
       option
         .setName('title')
-        .setDescription('Optional embed title')
+        .setDescription('Optional default embed title')
         .setRequired(false)
     ),
 
@@ -77,8 +89,7 @@ const commands = [
   new SlashCommandBuilder()
     .setName('suggestion')
     .setDescription('Open the suggestion form'),
-]
-  .map(command => command.toJSON());
+].map(command => command.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 
@@ -87,15 +98,15 @@ async function deployCommands() {
     console.log('🔄 Deploying slash commands...');
 
     if (!process.env.DISCORD_TOKEN) {
-      throw new Error('Missing DISCORD_TOKEN in .env / Railway variables');
+      throw new Error('Missing DISCORD_TOKEN in environment variables');
     }
 
     if (!process.env.CLIENT_ID) {
-      throw new Error('Missing CLIENT_ID in .env / Railway variables');
+      throw new Error('Missing CLIENT_ID in environment variables');
     }
 
     if (!process.env.GUILD_ID) {
-      throw new Error('Missing GUILD_ID in .env / Railway variables');
+      throw new Error('Missing GUILD_ID in environment variables');
     }
 
     await rest.put(
