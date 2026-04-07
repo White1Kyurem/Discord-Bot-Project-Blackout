@@ -12,6 +12,30 @@ const commands = [
     name: 'suggestion',
     description: 'Open the suggestion form directly',
   },
+  {
+    name: 'rulespanel',
+    description: 'Send the server rules panel',
+    default_member_permissions: PermissionFlagsBits.Administrator.toString(),
+  },
+  {
+    name: 'setrules',
+    description: 'Update the server rules text',
+    default_member_permissions: PermissionFlagsBits.Administrator.toString(),
+    options: [
+      {
+        name: 'text',
+        description: 'The full rules text',
+        type: 3,
+        required: true,
+      },
+      {
+        name: 'title',
+        description: 'Optional embed title',
+        type: 3,
+        required: false,
+      },
+    ],
+  },
 ];
 
 async function main() {
