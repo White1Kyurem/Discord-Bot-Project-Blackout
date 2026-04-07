@@ -46,31 +46,31 @@ function safe(value, fallback = '') {
 }
 
 function getRulesData() {
+  const fallback = {
+    title: 'Server Rules',
+    text:
+      '1. Respect all players.\n' +
+      '2. No cheating or exploiting.\n' +
+      '3. No abusive language.\n' +
+      '4. Follow staff instructions.\n' +
+      '5. Have fun.',
+  };
+
   try {
     if (!fs.existsSync(RULES_FILE)) {
-      return {
-        title: 'Server Rules',
-        text:
-          '1. Respect all players.\n' +
-          '2. No cheating or exploiting.\n' +
-          '3. No abusive language.\n' +
-          '4. Follow staff instructions.\n' +
-          '5. Have fun.',
-      };
+      return fallback;
     }
 
-    return JSON.parse(fs.readFileSync(RULES_FILE, 'utf8'));
+    const raw = fs.readFileSync(RULES_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+
+    return {
+      title: safe(parsed.title, fallback.title),
+      text: safe(parsed.text, fallback.text),
+    };
   } catch (error) {
     console.error('Failed to read rules file:', error);
-    return {
-      title: 'Server Rules',
-      text:
-        '1. Respect all players.\n' +
-        '2. No cheating or exploiting.\n' +
-        '3. No abusive language.\n' +
-        '4. Follow staff instructions.\n' +
-        '5. Have fun.',
-    };
+    return fallback;
   }
 }
 
@@ -293,18 +293,18 @@ function getMissingChannelPermissions(channel, me) {
 }
 
 client.once(Events.ClientReady, async () => {
-  console.log('Bot online');
+  console.log(`Bot online as ${client.user.tag}`);
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
   try {
     if (interaction.isChatInputCommand()) {
       if (interaction.commandName === 'ticketpanel') {
-        const channel = interaction.channel;
+        const channel = interaction.options.getChannel('channel');
 
         if (!channel || !channel.isTextBased()) {
           await interaction.reply({
-            content: 'This command can only be used in a normal text channel.',
+            content: 'Bitte wähle einen gültigen Textkanal aus.',
             ephemeral: true,
           });
           return;
@@ -316,8 +316,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
         if (missing.length) {
           await interaction.reply({
             content:
-              `I cannot send the suggestion panel in this channel.\n` +
-              `Missing permissions: ${missing.join(', ')}`,
+              `Ich kann das Suggestion-Panel nicht in ${channel} senden.\n` +
+              `Fehlende Rechte: ${missing.join(', ')}`,
             ephemeral: true,
           });
           return;
@@ -325,7 +325,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         await channel.send(buildSuggestionPanel());
         await interaction.reply({
-          content: 'Suggestion panel sent.',
+          content: `✅ Suggestion-Panel wurde in ${channel} gesendet.`,
           ephemeral: true,
         });
         return;
@@ -336,12 +336,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
 
-      if (interaction.commandName === 'rulespanel' || interaction.commandName === 'serverrules') {
-        const channel = interaction.channel;
+      if (
+        interaction.commandName === 'rulespanel'
+      ) {
+        const channel = interaction.options.getChannel('channel');
 
         if (!channel || !channel.isTextBased()) {
           await interaction.reply({
-            content: 'This command can only be used in a normal text channel.',
+            content: 'Bitte wähle einen gültigen Textkanal aus.',
             ephemeral: true,
           });
           return;
@@ -353,8 +355,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
         if (missing.length) {
           await interaction.reply({
             content:
-              `I cannot send the rules panel in this channel.\n` +
-              `Missing permissions: ${missing.join(', ')}`,
+              `Ich kann die Regeln nicht in ${channel} senden.\n` +
+              `Fehlende Rechte: ${missing.join(', ')}`,
             ephemeral: true,
           });
           return;
@@ -362,13 +364,27 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         await channel.send({ embeds: [buildRulesEmbed()] });
         await interaction.reply({
-          content: 'Rules panel sent.',
+          content: `✅ Regeln wurden in ${channel} gesendet.`,
           ephemeral: true,
         });
         return;
       }
 
-      if (interaction.commandName === 'setrules' || interaction.commandName === 'setserverrules') {
+      if (
+        interaction.commandName === 'rules' ||
+        interaction.commandName === 'serverrules'
+      ) {
+        await interaction.reply({
+          embeds: [buildRulesEmbed()],
+          ephemeral: false,
+        });
+        return;
+      }
+
+      if (
+        interaction.commandName === 'setrules' ||
+        interaction.commandName === 'setserverrules'
+      ) {
         await interaction.deferReply({ ephemeral: true });
 
         try {
@@ -381,12 +397,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
           });
 
           await interaction.editReply({
-            content: 'Rules updated successfully.',
+            content: '✅ Regeln wurden erfolgreich aktualisiert.',
           });
         } catch (error) {
           console.error('Set rules error:', error);
           await interaction.editReply({
-            content: 'Failed to update the rules.',
+            content: '❌ Regeln konnten nicht aktualisiert werden.',
           });
         }
 
@@ -407,7 +423,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       if (!TRELLO_KEY || !TRELLO_TOKEN || !TRELLO_BOARD_SHORTLINK) {
         await interaction.editReply({
-          content: 'The suggestion system is not configured yet. Please contact an administrator.',
+          content: 'Das Suggestion-System ist noch nicht konfiguriert. Bitte kontaktiere einen Admin.',
         });
         return;
       }
