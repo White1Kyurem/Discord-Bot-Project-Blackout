@@ -2,92 +2,98 @@ const { REST, Routes, SlashCommandBuilder, PermissionFlagsBits, ChannelType } = 
 require('dotenv').config();
 
 const commands = [
-  new SlashCommandBuilder()
-    .setName('rules')
-    .setDescription('Show the current server rules.'),
 
-  new SlashCommandBuilder()
-    .setName('rulespanel')
-    .setDescription('Send the rules embed to a selected channel.')
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-    .addChannelOption(option =>
-      option
-        .setName('channel')
-        .setDescription('The text channel where the rules should be sent.')
-        .addChannelTypes(ChannelType.GuildText)
-        .setRequired(true)
-    ),
+// RULES COMMANDS
+new SlashCommandBuilder()
+.setName('rules')
+.setDescription('Show the server rules'),
 
-  new SlashCommandBuilder()
-    .setName('setrules')
-    .setDescription('Update the saved server rules.')
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-    .addStringOption(option =>
-      option
-        .setName('text')
-        .setDescription('The full rules text.')
-        .setRequired(true)
-    )
-    .addStringOption(option =>
-      option
-        .setName('title')
-        .setDescription('Optional embed title.')
-        .setRequired(false)
-    ),
+new SlashCommandBuilder()
+.setName('serverrules')
+.setDescription('Show the server rules'),
 
-  new SlashCommandBuilder()
-    .setName('ticketpanel')
-    .setDescription('Send the suggestion panel to a selected channel.')
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-    .addChannelOption(option =>
-      option
-        .setName('channel')
-        .setDescription('The text channel where the suggestion panel should be sent.')
-        .addChannelTypes(ChannelType.GuildText)
-        .setRequired(true)
-    ),
+new SlashCommandBuilder()
+.setName('rulespanel')
+.setDescription('Send the rules panel to a channel')
+.setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+.addChannelOption(option =>
+option
+.setName('channel')
+.setDescription('Select the channel')
+.addChannelTypes(ChannelType.GuildText)
+.setRequired(true)
+),
 
-  new SlashCommandBuilder()
-    .setName('suggestion')
-    .setDescription('Open the suggestion form.'),
+new SlashCommandBuilder()
+.setName('setrules')
+.setDescription('Set or update the server rules')
+.setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+.addStringOption(option =>
+option
+.setName('text')
+.setDescription('The rules text')
+.setRequired(true)
+)
+.addStringOption(option =>
+option
+.setName('title')
+.setDescription('Optional embed title')
+.setRequired(false)
+),
 
-  new SlashCommandBuilder()
-    .setName('statuspanel')
-    .setDescription('Create or update the live server status panel in a selected channel.')
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-    .addChannelOption(option =>
-      option
-        .setName('channel')
-        .setDescription('The text channel where the status panel should be sent.')
-        .addChannelTypes(ChannelType.GuildText)
-        .setRequired(true)
-    ),
+new SlashCommandBuilder()
+.setName('setserverrules')
+.setDescription('Set or update the server rules')
+.setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+.addStringOption(option =>
+option
+.setName('text')
+.setDescription('The rules text')
+.setRequired(true)
+),
 
-  new SlashCommandBuilder()
-    .setName('refreshstatus')
-    .setDescription('Refresh the live server status panel now.')
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+// SUGGESTION SYSTEM
+new SlashCommandBuilder()
+.setName('ticketpanel')
+.setDescription('Send the suggestion panel to a channel')
+.setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+.addChannelOption(option =>
+option
+.setName('channel')
+.setDescription('Select the channel')
+.addChannelTypes(ChannelType.GuildText)
+.setRequired(true)
+),
+
+new SlashCommandBuilder()
+.setName('suggestion')
+.setDescription('Open the suggestion form'),
+
 ].map(command => command.toJSON());
 
-async function main() {
-  const { DISCORD_TOKEN, CLIENT_ID, GUILD_ID } = process.env;
+const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 
-  if (!DISCORD_TOKEN || !CLIENT_ID || !GUILD_ID) {
-    console.error('Missing DISCORD_TOKEN, CLIENT_ID, or GUILD_ID in .env');
-    process.exit(1);
-  }
+(async () => {
+try {
+console.log('🔄 Deploying slash commands...');
 
-  const rest = new REST({ version: '10' }).setToken(DISCORD_TOKEN);
-
-  await rest.put(
-    Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-    { body: commands }
-  );
-
-  console.log('Slash commands deployed successfully.');
+```
+if (!process.env.CLIENT_ID || !process.env.GUILD_ID) {
+  throw new Error('Missing CLIENT_ID or GUILD_ID in .env');
 }
 
-main().catch((error) => {
-  console.error('Failed to deploy slash commands:', error);
-  process.exit(1);
-});
+await rest.put(
+  Routes.applicationGuildCommands(
+    process.env.CLIENT_ID,
+    process.env.GUILD_ID
+  ),
+  { body: commands }
+);
+
+console.log('✅ Slash commands deployed successfully!');
+```
+
+} catch (error) {
+console.error('❌ Deploy error:', error);
+}
+})();
