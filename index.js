@@ -20,9 +20,13 @@ const {
   MessageFlags,
 } = require('discord.js');
 
+const { deployCommands } = require('./deploy-commands');
+
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
 });
+
+const EMBED_COLOR = 0x5b2a86; // dunkles violett
 
 const CONFIG = {
   token: process.env.DISCORD_TOKEN || '',
@@ -42,6 +46,7 @@ const CONFIG = {
   verifyRoleId: process.env.VERIFY_ROLE_ID || '',
   unverifiedRoleId: process.env.UNVERIFIED_ROLE_ID || '',
   verifyLogChannelId: process.env.VERIFY_LOG_CHANNEL_ID || '',
+  verifyImageUrl: process.env.VERIFY_IMAGE_URL || '',
 };
 
 const DATA_DIR = path.join(__dirname, 'data');
@@ -52,9 +57,6 @@ const VERIFY_BUTTON_ID = 'verify_user_button';
 const SUGGESTION_MODAL_ID = 'suggestion_modal';
 const RULES_MODAL_PREFIX = 'rules_modal_';
 
-// ==============================
-// Helpers
-// ==============================
 function ensureDataFiles() {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -92,22 +94,8 @@ function clampText(text, maxLength) {
   return text.length > maxLength ? text.slice(0, maxLength) : text;
 }
 
-function parseHexColor(input) {
-  const raw = safeString(input, '').replace('#', '').trim();
-
-  if (!raw) return 0x111111;
-  if (!/^[0-9a-fA-F]{6}$/.test(raw)) return 0x111111;
-
-  return parseInt(raw, 16);
-}
-
-function normalizeHexColor(input) {
-  const raw = safeString(input, '').replace('#', '').trim();
-
-  if (!raw) return '#111111';
-  if (!/^[0-9a-fA-F]{6}$/.test(raw)) return '#111111';
-
-  return `#${raw.toUpperCase()}`;
+function normalizeHexColor() {
+  return '#5B2A86';
 }
 
 function getRulesData() {
@@ -236,28 +224,23 @@ async function replyWithError(interaction, content) {
   }).catch(() => null);
 }
 
-// ==============================
-// Rules
-// ==============================
-function buildRulesEmbeds(title, text, colorInput) {
-  const color = parseHexColor(colorInput);
-  const normalizedColor = normalizeHexColor(colorInput);
+function buildRulesEmbeds(title, text) {
   const chunks = splitTextIntoChunks(text, 4000);
 
   return chunks.map((chunk, index) => {
     return new EmbedBuilder()
-      .setColor(color)
+      .setColor(EMBED_COLOR)
       .setTitle(index === 0 ? `📜 ${title}` : `📜 ${title} (${index + 1})`)
       .setDescription(chunk)
       .setFooter({
-        text: `${CONFIG.serverName} • Rules Panel • ${normalizedColor}`,
+        text: `${CONFIG.serverName} • Rules Panel • ${normalizeHexColor()}`,
       });
   });
 }
 
 function buildDefaultRulesEmbeds() {
   const rules = getRulesData();
-  return buildRulesEmbeds(rules.title, rules.text, '#111111');
+  return buildRulesEmbeds(rules.title, rules.text);
 }
 
 function buildRulesModal(channelId) {
@@ -275,11 +258,11 @@ function buildRulesModal(channelId) {
 
   const colorInput = new TextInputBuilder()
     .setCustomId('color')
-    .setLabel('Embed Color (Hex)')
+    .setLabel('Embed Color (not used, theme is fixed)')
     .setStyle(TextInputStyle.Short)
     .setRequired(false)
     .setMaxLength(7)
-    .setPlaceholder('Example: #FF0000');
+    .setPlaceholder('#5B2A86');
 
   const textInput = new TextInputBuilder()
     .setCustomId('text')
@@ -300,12 +283,9 @@ function buildRulesModal(channelId) {
   return modal;
 }
 
-// ==============================
-// Suggestions
-// ==============================
 function buildSuggestionPanel() {
   const embed = new EmbedBuilder()
-    .setColor(0x111111)
+    .setColor(EMBED_COLOR)
     .setTitle('📝 Suggestion Panel')
     .setDescription(
       'Have an idea for the server?\n\n' +
@@ -325,7 +305,7 @@ function buildSuggestionPanel() {
   const button = new ButtonBuilder()
     .setCustomId(PANEL_BUTTON_ID)
     .setLabel('Submit Suggestion')
-    .setStyle(ButtonStyle.Success);
+    .setStyle(ButtonStyle.Primary);
 
   return {
     embeds: [embed],
@@ -373,7 +353,7 @@ function buildSuggestionModal() {
 
 function buildSuggestionSuccessEmbed() {
   return new EmbedBuilder()
-    .setColor(0x22c55e)
+    .setColor(EMBED_COLOR)
     .setTitle('✅ Suggestion Submitted')
     .setDescription(
       'Your suggestion was sent successfully.\n\n' +
@@ -445,7 +425,7 @@ async function sendSuggestionLog(interaction, title, category, description, card
   if (!channel || !channel.isTextBased()) return;
 
   const embed = new EmbedBuilder()
-    .setColor(0x2563eb)
+    .setColor(EMBED_COLOR)
     .setTitle('New Suggestion')
     .addFields(
       {
@@ -476,12 +456,9 @@ async function sendSuggestionLog(interaction, title, category, description, card
   await channel.send({ embeds: [embed] }).catch(() => null);
 }
 
-// ==============================
-// Verification
-// ==============================
 function buildVerifyPanel() {
   const embed = new EmbedBuilder()
-    .setColor(0x22c55e)
+    .setColor(EMBED_COLOR)
     .setTitle('🔐 Server Verification')
     .setDescription(
       'To access the full server, you need to verify yourself.\n\n' +
@@ -496,10 +473,14 @@ function buildVerifyPanel() {
     })
     .setFooter({ text: `${CONFIG.serverName} • Verification` });
 
+  if (safeString(CONFIG.verifyImageUrl)) {
+    embed.setImage(CONFIG.verifyImageUrl);
+  }
+
   const button = new ButtonBuilder()
     .setCustomId(VERIFY_BUTTON_ID)
     .setLabel('Verify')
-    .setStyle(ButtonStyle.Success);
+    .setStyle(ButtonStyle.Primary);
 
   return {
     embeds: [embed],
@@ -517,7 +498,7 @@ async function sendVerifyLog(member) {
   if (!channel || !channel.isTextBased()) return;
 
   const embed = new EmbedBuilder()
-    .setColor(0x22c55e)
+    .setColor(EMBED_COLOR)
     .setTitle('✅ User Verified')
     .addFields(
       {
@@ -540,12 +521,9 @@ async function sendVerifyLog(member) {
   await channel.send({ embeds: [embed] }).catch(() => null);
 }
 
-// ==============================
-// Welcome
-// ==============================
 function buildWelcomeEmbed(member) {
   const embed = new EmbedBuilder()
-    .setColor(0x0f0f0f)
+    .setColor(EMBED_COLOR)
     .setTitle(`Welcome to ${CONFIG.serverName}`)
     .setDescription(
       `Welcome ${member}!\n\n` +
@@ -563,12 +541,15 @@ function buildWelcomeEmbed(member) {
   return embed;
 }
 
-// ==============================
-// Ready
-// ==============================
-client.once(Events.ClientReady, () => {
+client.once(Events.ClientReady, async () => {
   ensureDataFiles();
   console.log(`Logged in as ${client.user.tag}`);
+
+  try {
+    await deployCommands();
+  } catch (error) {
+    console.error('Failed to deploy slash commands:', error);
+  }
 
   try {
     client.user.setActivity(CONFIG.serverName, { type: ActivityType.Watching });
@@ -577,9 +558,6 @@ client.once(Events.ClientReady, () => {
   }
 });
 
-// ==============================
-// Auto Unverified on Join
-// ==============================
 client.on(Events.GuildMemberAdd, async member => {
   try {
     if (!CONFIG.unverifiedRoleId) return;
@@ -593,9 +571,6 @@ client.on(Events.GuildMemberAdd, async member => {
   }
 });
 
-// ==============================
-// Interactions
-// ==============================
 client.on(Events.InteractionCreate, async interaction => {
   try {
     if (interaction.isChatInputCommand()) {
@@ -827,12 +802,8 @@ client.on(Events.InteractionCreate, async interaction => {
         interaction.fields.getTextInputValue('text'),
         'No rules text provided.'
       );
-      const colorInput = safeString(
-        interaction.fields.getTextInputValue('color'),
-        '#111111'
-      );
 
-      const embeds = buildRulesEmbeds(title, text, colorInput);
+      const embeds = buildRulesEmbeds(title, text);
 
       await channel.send({ embeds });
 
@@ -840,7 +811,7 @@ client.on(Events.InteractionCreate, async interaction => {
         content:
           `✅ Rules panel sent to ${channel}.\n` +
           `Title: ${title}\n` +
-          `Color: ${normalizeHexColor(colorInput)}`,
+          `Color: ${normalizeHexColor()}`,
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -915,9 +886,6 @@ client.on(Events.InteractionCreate, async interaction => {
   }
 });
 
-// ==============================
-// Welcome after Verified Role gets added
-// ==============================
 client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
   try {
     if (!CONFIG.verifiedRoleId || !CONFIG.welcomeChannelId) return;
