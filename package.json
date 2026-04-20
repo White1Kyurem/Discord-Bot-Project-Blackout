@@ -1,13 +1,15 @@
 {
-  "name": "project-blackout-discord-bot",
-  "version": "2.0.0",
+  "name": "project-blackout-bot",
+  "version": "1.0.0",
+  "description": "Discord bot with suggestions, rules, verification and logging",
   "main": "index.js",
   "scripts": {
-    "start": "node deploy-commands.js && node index.js"
+    "start": "node index.js",
+    "deploy": "node deploy-commands.js"
   },
   "dependencies": {
-    "discord.js": "^14.14.1",
-    "dotenv": "^16.4.0",
-    "axios": "^1.6.0"
+    "axios": "^1.7.9",
+    "discord.js": "^14.26.2",
+    "dotenv": "^16.4.7"
   }
 }
