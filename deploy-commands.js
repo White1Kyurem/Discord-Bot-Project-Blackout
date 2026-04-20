@@ -27,8 +27,28 @@ const commands = [
     .setDescription('Show the default server rules.'),
 
   new SlashCommandBuilder()
+    .setName('serverrules')
+    .setDescription('Show the default server rules.'),
+
+  new SlashCommandBuilder()
     .setName('setrules')
-    .setDescription('Update the default server rules.')
+    .setDescription('Set or update the default server rules.')
+    .addStringOption(option =>
+      option
+        .setName('title')
+        .setDescription('Title of the rules panel')
+        .setRequired(true)
+    )
+    .addStringOption(option =>
+      option
+        .setName('text')
+        .setDescription('Rules text')
+        .setRequired(true)
+    ),
+
+  new SlashCommandBuilder()
+    .setName('setserverrules')
+    .setDescription('Set or update the default server rules.')
     .addStringOption(option =>
       option
         .setName('title')
@@ -44,7 +64,7 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName('rulespanel')
-    .setDescription('Create a rules panel in a selected channel.')
+    .setDescription('Open a form to create a custom rules panel.')
     .addChannelOption(option =>
       option
         .setName('channel')
@@ -55,7 +75,7 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName('ticketpanel')
-    .setDescription('Send the suggestion panel to a selected channel.')
+    .setDescription('Send the suggestion panel to a channel.')
     .addChannelOption(option =>
       option
         .setName('channel')
@@ -66,7 +86,7 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName('verifypanel')
-    .setDescription('Send the verification panel to a selected channel.')
+    .setDescription('Send the verification panel to a channel.')
     .addChannelOption(option =>
       option
         .setName('channel')
