@@ -464,13 +464,6 @@ function buildVerifyPanel() {
       'To access the full server, you need to verify yourself.\n\n' +
         'Click the button below to get verified and unlock all channels.'
     )
-    .addFields({
-      name: 'Access',
-      value:
-        '• New members receive the Unverified role automatically\n' +
-        '• After clicking the button, the Unverified role is removed\n' +
-        '• The Verified role is added automatically',
-    })
     .setFooter({ text: `${CONFIG.serverName} • Verification` });
 
   if (safeString(CONFIG.verifyImageUrl)) {
