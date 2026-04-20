@@ -25,7 +25,7 @@ const client = new Client({
 });
 
 const CONFIG = {
-  token: process.env.DISCORD_TOKEN,
+  token: process.env.DISCORD_TOKEN || '',
   serverName: process.env.SERVER_NAME || 'Project Blackout PVP',
 
   trelloKey: process.env.TRELLO_KEY || '',
@@ -38,15 +38,23 @@ const CONFIG = {
   welcomeChannelId: process.env.WELCOME_CHANNEL_ID || '',
   verifiedRoleId: process.env.VERIFIED_ROLE_ID || '',
   welcomeImageUrl: process.env.WELCOME_IMAGE_URL || '',
+
+  verifyRoleId: process.env.VERIFY_ROLE_ID || '',
+  unverifiedRoleId: process.env.UNVERIFIED_ROLE_ID || '',
+  verifyLogChannelId: process.env.VERIFY_LOG_CHANNEL_ID || '',
 };
 
 const DATA_DIR = path.join(__dirname, 'data');
 const RULES_FILE = path.join(DATA_DIR, 'rules.json');
 
 const PANEL_BUTTON_ID = 'open_suggestion_modal';
+const VERIFY_BUTTON_ID = 'verify_user_button';
 const SUGGESTION_MODAL_ID = 'suggestion_modal';
 const RULES_MODAL_PREFIX = 'rules_modal_';
 
+// ==============================
+// Helpers
+// ==============================
 function ensureDataFiles() {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -191,21 +199,59 @@ function splitTextIntoChunks(text, maxLength = 4000) {
   return chunks.length ? chunks : ['No content provided.'];
 }
 
+function getMissingChannelPermissions(channel, me) {
+  const perms = channel.permissionsFor(me);
+  if (!perms) return ['ViewChannel', 'SendMessages', 'EmbedLinks'];
+
+  const missing = [];
+
+  if (!perms.has(PermissionsBitField.Flags.ViewChannel)) {
+    missing.push('ViewChannel');
+  }
+
+  if (!perms.has(PermissionsBitField.Flags.SendMessages)) {
+    missing.push('SendMessages');
+  }
+
+  if (!perms.has(PermissionsBitField.Flags.EmbedLinks)) {
+    missing.push('EmbedLinks');
+  }
+
+  return missing;
+}
+
+async function replyWithError(interaction, content) {
+  if (interaction.deferred || interaction.replied) {
+    await interaction.editReply({
+      content,
+      embeds: [],
+      components: [],
+    }).catch(() => null);
+    return;
+  }
+
+  await interaction.reply({
+    content,
+    flags: MessageFlags.Ephemeral,
+  }).catch(() => null);
+}
+
+// ==============================
+// Rules
+// ==============================
 function buildRulesEmbeds(title, text, colorInput) {
   const color = parseHexColor(colorInput);
   const normalizedColor = normalizeHexColor(colorInput);
   const chunks = splitTextIntoChunks(text, 4000);
 
   return chunks.map((chunk, index) => {
-    const embed = new EmbedBuilder()
+    return new EmbedBuilder()
       .setColor(color)
       .setTitle(index === 0 ? `📜 ${title}` : `📜 ${title} (${index + 1})`)
       .setDescription(chunk)
       .setFooter({
         text: `${CONFIG.serverName} • Rules Panel • ${normalizedColor}`,
       });
-
-    return embed;
   });
 }
 
@@ -214,6 +260,49 @@ function buildDefaultRulesEmbeds() {
   return buildRulesEmbeds(rules.title, rules.text, '#111111');
 }
 
+function buildRulesModal(channelId) {
+  const modal = new ModalBuilder()
+    .setCustomId(`${RULES_MODAL_PREFIX}${channelId}`)
+    .setTitle('Create Rules Panel');
+
+  const titleInput = new TextInputBuilder()
+    .setCustomId('title')
+    .setLabel('Panel Title')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setMaxLength(100)
+    .setPlaceholder('Example: Basebuilding Rules');
+
+  const colorInput = new TextInputBuilder()
+    .setCustomId('color')
+    .setLabel('Embed Color (Hex)')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false)
+    .setMaxLength(7)
+    .setPlaceholder('Example: #FF0000');
+
+  const textInput = new TextInputBuilder()
+    .setCustomId('text')
+    .setLabel('Rules Text')
+    .setStyle(TextInputStyle.Paragraph)
+    .setRequired(true)
+    .setMaxLength(4000)
+    .setPlaceholder(
+      'Write your rules here.\n\nYou can use multiple lines, empty lines, and bullet points.'
+    );
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(titleInput),
+    new ActionRowBuilder().addComponents(colorInput),
+    new ActionRowBuilder().addComponents(textInput)
+  );
+
+  return modal;
+}
+
+// ==============================
+// Suggestions
+// ==============================
 function buildSuggestionPanel() {
   const embed = new EmbedBuilder()
     .setColor(0x111111)
@@ -282,46 +371,6 @@ function buildSuggestionModal() {
   return modal;
 }
 
-function buildRulesModal(channelId) {
-  const modal = new ModalBuilder()
-    .setCustomId(`${RULES_MODAL_PREFIX}${channelId}`)
-    .setTitle('Create Rules Panel');
-
-  const titleInput = new TextInputBuilder()
-    .setCustomId('title')
-    .setLabel('Panel Title')
-    .setStyle(TextInputStyle.Short)
-    .setRequired(true)
-    .setMaxLength(100)
-    .setPlaceholder('Example: Basebuilding Rules');
-
-  const colorInput = new TextInputBuilder()
-    .setCustomId('color')
-    .setLabel('Embed Color (Hex)')
-    .setStyle(TextInputStyle.Short)
-    .setRequired(false)
-    .setMaxLength(7)
-    .setPlaceholder('Example: #FF0000');
-
-  const textInput = new TextInputBuilder()
-    .setCustomId('text')
-    .setLabel('Rules Text')
-    .setStyle(TextInputStyle.Paragraph)
-    .setRequired(true)
-    .setMaxLength(4000)
-    .setPlaceholder(
-      'Write your rules here.\n\nYou can use multiple lines, empty lines, and bullet points.'
-    );
-
-  modal.addComponents(
-    new ActionRowBuilder().addComponents(titleInput),
-    new ActionRowBuilder().addComponents(colorInput),
-    new ActionRowBuilder().addComponents(textInput)
-  );
-
-  return modal;
-}
-
 function buildSuggestionSuccessEmbed() {
   return new EmbedBuilder()
     .setColor(0x22c55e)
@@ -335,47 +384,6 @@ function buildSuggestionSuccessEmbed() {
       value: `[Open Board](${CONFIG.trelloBoardUrl})`,
     })
     .setFooter({ text: `${CONFIG.serverName} • Suggestions` });
-}
-
-function buildWelcomeEmbed(member) {
-  const embed = new EmbedBuilder()
-    .setColor(0x0f0f0f)
-    .setTitle(`Welcome to ${CONFIG.serverName}`)
-    .setDescription(
-      `Welcome ${member}!\n\n` +
-        'You are now verified and ready to join the community.\n' +
-        'Please read the rules, stay respectful, and have fun.'
-    )
-    .setThumbnail(member.user.displayAvatarURL({ extension: 'png' }))
-    .setFooter({ text: CONFIG.serverName })
-    .setTimestamp();
-
-  if (safeString(CONFIG.welcomeImageUrl)) {
-    embed.setImage(CONFIG.welcomeImageUrl);
-  }
-
-  return embed;
-}
-
-function getMissingChannelPermissions(channel, me) {
-  const perms = channel.permissionsFor(me);
-  if (!perms) return ['ViewChannel', 'SendMessages', 'EmbedLinks'];
-
-  const missing = [];
-
-  if (!perms.has(PermissionsBitField.Flags.ViewChannel)) {
-    missing.push('ViewChannel');
-  }
-
-  if (!perms.has(PermissionsBitField.Flags.SendMessages)) {
-    missing.push('SendMessages');
-  }
-
-  if (!perms.has(PermissionsBitField.Flags.EmbedLinks)) {
-    missing.push('EmbedLinks');
-  }
-
-  return missing;
 }
 
 async function findTrelloListId() {
@@ -465,25 +473,99 @@ async function sendSuggestionLog(interaction, title, category, description, card
     )
     .setTimestamp();
 
-  await channel.send({ embeds: [embed] });
+  await channel.send({ embeds: [embed] }).catch(() => null);
 }
 
-async function replyWithError(interaction, content) {
-  if (interaction.deferred || interaction.replied) {
-    await interaction.editReply({
-      content,
-      embeds: [],
-      components: [],
-    }).catch(() => null);
-    return;
+// ==============================
+// Verification
+// ==============================
+function buildVerifyPanel() {
+  const embed = new EmbedBuilder()
+    .setColor(0x22c55e)
+    .setTitle('🔐 Server Verification')
+    .setDescription(
+      'To access the full server, you need to verify yourself.\n\n' +
+        'Click the button below to get verified and unlock all channels.'
+    )
+    .addFields({
+      name: 'Access',
+      value:
+        '• New members receive the Unverified role automatically\n' +
+        '• After clicking the button, the Unverified role is removed\n' +
+        '• The Verified role is added automatically',
+    })
+    .setFooter({ text: `${CONFIG.serverName} • Verification` });
+
+  const button = new ButtonBuilder()
+    .setCustomId(VERIFY_BUTTON_ID)
+    .setLabel('Verify')
+    .setStyle(ButtonStyle.Success);
+
+  return {
+    embeds: [embed],
+    components: [new ActionRowBuilder().addComponents(button)],
+  };
+}
+
+async function sendVerifyLog(member) {
+  if (!CONFIG.verifyLogChannelId) return;
+
+  const channel = await member.guild.channels
+    .fetch(CONFIG.verifyLogChannelId)
+    .catch(() => null);
+
+  if (!channel || !channel.isTextBased()) return;
+
+  const embed = new EmbedBuilder()
+    .setColor(0x22c55e)
+    .setTitle('✅ User Verified')
+    .addFields(
+      {
+        name: 'User',
+        value: `${member.user.tag} (${member.id})`,
+      },
+      {
+        name: 'Verified Role',
+        value: CONFIG.verifyRoleId ? `<@&${CONFIG.verifyRoleId}>` : 'Not configured',
+        inline: true,
+      },
+      {
+        name: 'Unverified Removed',
+        value: CONFIG.unverifiedRoleId ? `<@&${CONFIG.unverifiedRoleId}>` : 'Not configured',
+        inline: true,
+      }
+    )
+    .setTimestamp();
+
+  await channel.send({ embeds: [embed] }).catch(() => null);
+}
+
+// ==============================
+// Welcome
+// ==============================
+function buildWelcomeEmbed(member) {
+  const embed = new EmbedBuilder()
+    .setColor(0x0f0f0f)
+    .setTitle(`Welcome to ${CONFIG.serverName}`)
+    .setDescription(
+      `Welcome ${member}!\n\n` +
+        'You are now verified and ready to join the community.\n' +
+        'Please read the rules, stay respectful, and have fun.'
+    )
+    .setThumbnail(member.user.displayAvatarURL({ extension: 'png' }))
+    .setFooter({ text: CONFIG.serverName })
+    .setTimestamp();
+
+  if (safeString(CONFIG.welcomeImageUrl)) {
+    embed.setImage(CONFIG.welcomeImageUrl);
   }
 
-  await interaction.reply({
-    content,
-    flags: MessageFlags.Ephemeral,
-  }).catch(() => null);
+  return embed;
 }
 
+// ==============================
+// Ready
+// ==============================
 client.once(Events.ClientReady, () => {
   ensureDataFiles();
   console.log(`Logged in as ${client.user.tag}`);
@@ -495,6 +577,25 @@ client.once(Events.ClientReady, () => {
   }
 });
 
+// ==============================
+// Auto Unverified on Join
+// ==============================
+client.on(Events.GuildMemberAdd, async member => {
+  try {
+    if (!CONFIG.unverifiedRoleId) return;
+
+    const role = member.guild.roles.cache.get(CONFIG.unverifiedRoleId);
+    if (!role) return;
+
+    await member.roles.add(role).catch(() => null);
+  } catch (error) {
+    console.error('Unverified role error:', error);
+  }
+});
+
+// ==============================
+// Interactions
+// ==============================
 client.on(Events.InteractionCreate, async interaction => {
   try {
     if (interaction.isChatInputCommand()) {
@@ -587,6 +688,39 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
+      if (interaction.commandName === 'verifypanel') {
+        const channel = interaction.options.getChannel('channel');
+
+        if (!channel || !channel.isTextBased()) {
+          await interaction.reply({
+            content: 'Please select a valid text channel.',
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        const me = interaction.guild?.members?.me;
+        const missing = me ? getMissingChannelPermissions(channel, me) : ['Unknown'];
+
+        if (missing.length) {
+          await interaction.reply({
+            content:
+              `I cannot send the verify panel to ${channel}.\n` +
+              `Missing permissions: ${missing.join(', ')}`,
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        await channel.send(buildVerifyPanel());
+
+        await interaction.reply({
+          content: `✅ Verify panel sent to ${channel}.`,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
       if (interaction.commandName === 'suggestion') {
         await interaction.showModal(buildSuggestionModal());
         return;
@@ -595,6 +729,65 @@ client.on(Events.InteractionCreate, async interaction => {
 
     if (interaction.isButton() && interaction.customId === PANEL_BUTTON_ID) {
       await interaction.showModal(buildSuggestionModal());
+      return;
+    }
+
+    if (interaction.isButton() && interaction.customId === VERIFY_BUTTON_ID) {
+      if (!interaction.guild) {
+        await interaction.reply({
+          content: '❌ This button can only be used in a server.',
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      if (!CONFIG.verifyRoleId) {
+        await interaction.reply({
+          content: '❌ VERIFY_ROLE_ID is not configured.',
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+      if (!member) {
+        await interaction.reply({
+          content: '❌ Member not found.',
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      const verifyRole = interaction.guild.roles.cache.get(CONFIG.verifyRoleId);
+      if (!verifyRole) {
+        await interaction.reply({
+          content: '❌ Verified role not found.',
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      if (member.roles.cache.has(CONFIG.verifyRoleId)) {
+        await interaction.reply({
+          content: '✅ You are already verified.',
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      await member.roles.add(CONFIG.verifyRoleId).catch(() => null);
+
+      if (CONFIG.unverifiedRoleId && member.roles.cache.has(CONFIG.unverifiedRoleId)) {
+        await member.roles.remove(CONFIG.unverifiedRoleId).catch(() => null);
+      }
+
+      await sendVerifyLog(member);
+
+      await interaction.reply({
+        content: '✅ You have been verified successfully.',
+        flags: MessageFlags.Ephemeral,
+      });
+
       return;
     }
 
@@ -710,8 +903,7 @@ client.on(Events.InteractionCreate, async interaction => {
       } catch (error) {
         console.error('Suggestion submit error:', error);
         await interaction.editReply({
-          content:
-            '❌ Failed to submit the suggestion. Please try again later.',
+          content: '❌ Failed to submit the suggestion. Please try again later.',
         });
       }
 
@@ -723,6 +915,9 @@ client.on(Events.InteractionCreate, async interaction => {
   }
 });
 
+// ==============================
+// Welcome after Verified Role gets added
+// ==============================
 client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
   try {
     if (!CONFIG.verifiedRoleId || !CONFIG.welcomeChannelId) return;
