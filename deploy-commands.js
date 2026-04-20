@@ -1,114 +1,98 @@
-const {
-  REST,
-  Routes,
-  SlashCommandBuilder,
-  PermissionFlagsBits,
-  ChannelType,
-} = require('discord.js');
 require('dotenv').config();
+
+const { REST, Routes, SlashCommandBuilder, ChannelType } = require('discord.js');
+
+const token = process.env.DISCORD_TOKEN;
+const clientId = process.env.CLIENT_ID;
+const guildId = process.env.GUILD_ID;
+
+if (!token) {
+  console.error('Missing DISCORD_TOKEN in .env');
+  process.exit(1);
+}
+
+if (!clientId) {
+  console.error('Missing CLIENT_ID in .env');
+  process.exit(1);
+}
+
+if (!guildId) {
+  console.error('Missing GUILD_ID in .env');
+  process.exit(1);
+}
 
 const commands = [
   new SlashCommandBuilder()
     .setName('rules')
-    .setDescription('Show the default server rules'),
-
-  new SlashCommandBuilder()
-    .setName('serverrules')
-    .setDescription('Show the default server rules'),
+    .setDescription('Show the default server rules.'),
 
   new SlashCommandBuilder()
     .setName('setrules')
-    .setDescription('Set or update the default server rules')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .setDescription('Update the default server rules.')
     .addStringOption(option =>
       option
-        .setName('text')
-        .setDescription('The default rules text')
+        .setName('title')
+        .setDescription('Title of the rules panel')
         .setRequired(true)
     )
     .addStringOption(option =>
       option
-        .setName('title')
-        .setDescription('Optional default embed title')
-        .setRequired(false)
-    ),
-
-  new SlashCommandBuilder()
-    .setName('setserverrules')
-    .setDescription('Set or update the default server rules')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-    .addStringOption(option =>
-      option
         .setName('text')
-        .setDescription('The default rules text')
+        .setDescription('Rules text')
         .setRequired(true)
-    )
-    .addStringOption(option =>
-      option
-        .setName('title')
-        .setDescription('Optional default embed title')
-        .setRequired(false)
     ),
 
   new SlashCommandBuilder()
     .setName('rulespanel')
-    .setDescription('Open a form to create a custom rules panel')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .setDescription('Create a rules panel in a selected channel.')
     .addChannelOption(option =>
       option
         .setName('channel')
-        .setDescription('Select the channel')
+        .setDescription('The channel where the rules panel should be sent')
         .addChannelTypes(ChannelType.GuildText)
         .setRequired(true)
     ),
 
   new SlashCommandBuilder()
     .setName('ticketpanel')
-    .setDescription('Send the suggestion panel to a channel')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .setDescription('Send the suggestion panel to a selected channel.')
     .addChannelOption(option =>
       option
         .setName('channel')
-        .setDescription('Select the channel')
+        .setDescription('The channel where the suggestion panel should be sent')
+        .addChannelTypes(ChannelType.GuildText)
+        .setRequired(true)
+    ),
+
+  new SlashCommandBuilder()
+    .setName('verifypanel')
+    .setDescription('Send the verification panel to a selected channel.')
+    .addChannelOption(option =>
+      option
+        .setName('channel')
+        .setDescription('The channel where the verification panel should be sent')
         .addChannelTypes(ChannelType.GuildText)
         .setRequired(true)
     ),
 
   new SlashCommandBuilder()
     .setName('suggestion')
-    .setDescription('Open the suggestion form'),
+    .setDescription('Open the suggestion form.'),
 ].map(command => command.toJSON());
 
-const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+const rest = new REST({ version: '10' }).setToken(token);
 
-async function deployCommands() {
+(async () => {
   try {
-    console.log('🔄 Deploying slash commands...');
-
-    if (!process.env.DISCORD_TOKEN) {
-      throw new Error('Missing DISCORD_TOKEN in environment variables');
-    }
-
-    if (!process.env.CLIENT_ID) {
-      throw new Error('Missing CLIENT_ID in environment variables');
-    }
-
-    if (!process.env.GUILD_ID) {
-      throw new Error('Missing GUILD_ID in environment variables');
-    }
+    console.log(`Started refreshing ${commands.length} application (/) commands.`);
 
     await rest.put(
-      Routes.applicationGuildCommands(
-        process.env.CLIENT_ID,
-        process.env.GUILD_ID
-      ),
+      Routes.applicationGuildCommands(clientId, guildId),
       { body: commands }
     );
 
-    console.log('✅ Slash commands deployed successfully!');
+    console.log('Successfully reloaded application (/) commands.');
   } catch (error) {
-    console.error('❌ Deploy error:', error);
+    console.error('Error while deploying commands:', error);
   }
-}
-
-deployCommands();
+})();
