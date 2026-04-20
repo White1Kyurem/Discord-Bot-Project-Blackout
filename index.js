@@ -222,22 +222,15 @@ function buildSuggestionPanel() {
       'Have an idea for the server?\n\n' +
         'Click the button below to submit a suggestion for features, balancing, events, fixes, or improvements.'
     )
-    .addFields(
-      {
-        name: 'Examples',
-        value:
-          '• New features\n' +
-          '• Base building changes\n' +
-          '• Raiding changes\n' +
-          '• PvP balancing\n' +
-          '• Bug fixes',
-      },
-      {
-        name: 'How it works',
-        value:
-          'Press the button, fill out the form, and the suggestion will be sent to the Trello board.',
-      }
-    )
+    .addFields({
+      name: 'Examples',
+      value:
+        '• New features\n' +
+        '• Base building changes\n' +
+        '• Raiding changes\n' +
+        '• PvP balancing\n' +
+        '• Bug fixes',
+    })
     .setFooter({ text: `${CONFIG.serverName} • Suggestions` });
 
   const button = new ButtonBuilder()
@@ -668,11 +661,7 @@ client.on(Events.InteractionCreate, async interaction => {
         flags: MessageFlags.Ephemeral,
       });
 
-      if (
-        !CONFIG.trelloKey ||
-        !CONFIG.trelloToken ||
-        !CONFIG.trelloBoardShortlink
-      ) {
+      if (!CONFIG.trelloKey || !CONFIG.trelloToken || !CONFIG.trelloBoardShortlink) {
         await interaction.editReply({
           content:
             'The suggestion system is not configured yet. Please contact an administrator.',
