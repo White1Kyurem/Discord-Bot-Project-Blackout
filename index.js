@@ -26,7 +26,7 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
 });
 
-const EMBED_COLOR = 0x5b2a86; // dunkles violett
+const EMBED_COLOR = 0x5b2a86;
 
 const CONFIG = {
   token: process.env.DISCORD_TOKEN || '',
@@ -47,6 +47,9 @@ const CONFIG = {
   unverifiedRoleId: process.env.UNVERIFIED_ROLE_ID || '',
   verifyLogChannelId: process.env.VERIFY_LOG_CHANNEL_ID || '',
   verifyImageUrl: process.env.VERIFY_IMAGE_URL || '',
+
+  priorityHighRoleIds: process.env.PRIORITY_HIGH_ROLE_IDS || '',
+  priorityMediumRoleIds: process.env.PRIORITY_MEDIUM_ROLE_IDS || '',
 };
 
 const DATA_DIR = path.join(__dirname, 'data');
@@ -96,6 +99,38 @@ function clampText(text, maxLength) {
 
 function normalizeHexColor() {
   return '#5B2A86';
+}
+
+function parseRoleIds(value) {
+  return safeString(value)
+    .split(',')
+    .map(id => id.trim())
+    .filter(Boolean);
+}
+
+function getSuggestionPriority(member) {
+  if (!member || !member.roles || !member.roles.cache) {
+    return 'NORMAL';
+  }
+
+  const highRoleIds = parseRoleIds(CONFIG.priorityHighRoleIds);
+  const mediumRoleIds = parseRoleIds(CONFIG.priorityMediumRoleIds);
+
+  if (member.roles.cache.some(role => highRoleIds.includes(role.id))) {
+    return 'HIGH';
+  }
+
+  if (member.roles.cache.some(role => mediumRoleIds.includes(role.id))) {
+    return 'MEDIUM';
+  }
+
+  return 'NORMAL';
+}
+
+function getPriorityColor(priority) {
+  if (priority === 'HIGH') return 0xff0000;
+  if (priority === 'MEDIUM') return 0xffa500;
+  return EMBED_COLOR;
 }
 
 function getRulesData() {
@@ -351,12 +386,13 @@ function buildSuggestionModal() {
   return modal;
 }
 
-function buildSuggestionSuccessEmbed() {
+function buildSuggestionSuccessEmbed(priority = 'NORMAL') {
   return new EmbedBuilder()
-    .setColor(EMBED_COLOR)
+    .setColor(getPriorityColor(priority))
     .setTitle('✅ Suggestion Submitted')
     .setDescription(
       'Your suggestion was sent successfully.\n\n' +
+        `Priority: **${priority}**\n\n` +
         'You can track progress and updates on the Trello board.'
     )
     .addFields({
@@ -393,6 +429,7 @@ async function createSuggestionCard(data) {
   const listId = await findTrelloListId();
 
   const desc = [
+    `Priority: ${data.priority || 'NORMAL'}`,
     `User: ${data.user}`,
     `User ID: ${data.userId}`,
     `Server: ${data.guild}`,
@@ -406,7 +443,7 @@ async function createSuggestionCard(data) {
       key: CONFIG.trelloKey,
       token: CONFIG.trelloToken,
       idList: listId,
-      name: data.title,
+      name: `[${data.priority || 'NORMAL'}] ${data.title}`,
       desc,
     },
     timeout: 15000,
@@ -415,7 +452,7 @@ async function createSuggestionCard(data) {
   return response.data;
 }
 
-async function sendSuggestionLog(interaction, title, category, description, cardUrl) {
+async function sendSuggestionLog(interaction, title, category, description, cardUrl, priority = 'NORMAL') {
   if (!CONFIG.logChannelId || !interaction.guild) return;
 
   const channel = await interaction.guild.channels
@@ -425,12 +462,17 @@ async function sendSuggestionLog(interaction, title, category, description, card
   if (!channel || !channel.isTextBased()) return;
 
   const embed = new EmbedBuilder()
-    .setColor(EMBED_COLOR)
+    .setColor(getPriorityColor(priority))
     .setTitle('New Suggestion')
     .addFields(
       {
         name: 'User',
         value: `${interaction.user.tag} (${interaction.user.id})`,
+      },
+      {
+        name: 'Priority',
+        value: priority || 'NORMAL',
+        inline: true,
       },
       {
         name: 'Category',
@@ -839,6 +881,8 @@ client.on(Events.InteractionCreate, async interaction => {
         'No description'
       );
 
+      const priority = getSuggestionPriority(interaction.member);
+
       try {
         const card = await createSuggestionCard({
           title,
@@ -847,6 +891,7 @@ client.on(Events.InteractionCreate, async interaction => {
           user: interaction.user.tag,
           userId: interaction.user.id,
           guild: interaction.guild?.name || 'Unknown',
+          priority,
         });
 
         try {
@@ -855,14 +900,15 @@ client.on(Events.InteractionCreate, async interaction => {
             title,
             category,
             description,
-            card.shortUrl
+            card.shortUrl,
+            priority
           );
         } catch (logError) {
           console.error('Suggestion log error:', logError);
         }
 
         await interaction.editReply({
-          embeds: [buildSuggestionSuccessEmbed()],
+          embeds: [buildSuggestionSuccessEmbed(priority)],
         });
       } catch (error) {
         console.error('Suggestion submit error:', error);
