@@ -38,6 +38,11 @@ const CONFIG = {
   trelloTargetListName: process.env.TRELLO_TARGET_LIST_NAME || 'Suggestions',
   trelloBoardUrl: process.env.TRELLO_BOARD_URL || 'https://trello.com/',
 
+  trelloHighPriorityLabelName: process.env.TRELLO_HIGH_PRIORITY_LABEL_NAME || 'High Priority',
+  trelloMediumPriorityLabelName: process.env.TRELLO_MEDIUM_PRIORITY_LABEL_NAME || 'Medium Priority',
+  trelloHighPriorityLabelColor: process.env.TRELLO_HIGH_PRIORITY_LABEL_COLOR || 'red',
+  trelloMediumPriorityLabelColor: process.env.TRELLO_MEDIUM_PRIORITY_LABEL_COLOR || 'yellow',
+
   logChannelId: process.env.LOG_CHANNEL_ID || '',
   welcomeChannelId: process.env.WELCOME_CHANNEL_ID || '',
   verifiedRoleId: process.env.VERIFIED_ROLE_ID || '',
@@ -129,7 +134,7 @@ function getSuggestionPriority(member) {
 
 function getPriorityColor(priority) {
   if (priority === 'HIGH') return 0xff0000;
-  if (priority === 'MEDIUM') return 0xffa500;
+  if (priority === 'MEDIUM') return 0xfacc15;
   return EMBED_COLOR;
 }
 
@@ -425,11 +430,65 @@ async function findTrelloListId() {
   return list.id;
 }
 
+async function findOrCreateTrelloLabel(labelName, labelColor) {
+  const response = await axios.get(
+    `https://api.trello.com/1/boards/${CONFIG.trelloBoardShortlink}/labels`,
+    {
+      params: {
+        key: CONFIG.trelloKey,
+        token: CONFIG.trelloToken,
+      },
+      timeout: 15000,
+    }
+  );
+
+  const existingLabel = response.data.find(
+    label => label.name.toLowerCase() === labelName.toLowerCase()
+  );
+
+  if (existingLabel) {
+    return existingLabel.id;
+  }
+
+  const createdLabel = await axios.post('https://api.trello.com/1/labels', null, {
+    params: {
+      key: CONFIG.trelloKey,
+      token: CONFIG.trelloToken,
+      idBoard: CONFIG.trelloBoardShortlink,
+      name: labelName,
+      color: labelColor,
+    },
+    timeout: 15000,
+  });
+
+  return createdLabel.data.id;
+}
+
+async function getPriorityLabelId(priority) {
+  if (priority === 'HIGH') {
+    return findOrCreateTrelloLabel(
+      CONFIG.trelloHighPriorityLabelName,
+      CONFIG.trelloHighPriorityLabelColor
+    );
+  }
+
+  if (priority === 'MEDIUM') {
+    return findOrCreateTrelloLabel(
+      CONFIG.trelloMediumPriorityLabelName,
+      CONFIG.trelloMediumPriorityLabelColor
+    );
+  }
+
+  return null;
+}
+
 async function createSuggestionCard(data) {
   const listId = await findTrelloListId();
+  const priority = data.priority || 'NORMAL';
+  const labelId = await getPriorityLabelId(priority);
 
   const desc = [
-    `Priority: ${data.priority || 'NORMAL'}`,
+    `Priority: ${priority}`,
     `User: ${data.user}`,
     `User ID: ${data.userId}`,
     `Server: ${data.guild}`,
@@ -438,14 +497,20 @@ async function createSuggestionCard(data) {
     data.description,
   ].join('\n');
 
+  const params = {
+    key: CONFIG.trelloKey,
+    token: CONFIG.trelloToken,
+    idList: listId,
+    name: data.title,
+    desc,
+  };
+
+  if (labelId) {
+    params.idLabels = labelId;
+  }
+
   const response = await axios.post('https://api.trello.com/1/cards', null, {
-    params: {
-      key: CONFIG.trelloKey,
-      token: CONFIG.trelloToken,
-      idList: listId,
-      name: `[${data.priority || 'NORMAL'}] ${data.title}`,
-      desc,
-    },
+    params,
     timeout: 15000,
   });
 
