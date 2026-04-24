@@ -1,6 +1,12 @@
 require('dotenv').config();
 
-const { REST, Routes, SlashCommandBuilder, ChannelType } = require('discord.js');
+const {
+  REST,
+  Routes,
+  SlashCommandBuilder,
+  ChannelType,
+  PermissionFlagsBits,
+} = require('discord.js');
 
 async function deployCommands() {
   const token = process.env.DISCORD_TOKEN;
@@ -20,6 +26,7 @@ async function deployCommands() {
   }
 
   const commands = [
+
     new SlashCommandBuilder()
       .setName('rules')
       .setDescription('Show the default server rules.'),
@@ -31,6 +38,7 @@ async function deployCommands() {
     new SlashCommandBuilder()
       .setName('setrules')
       .setDescription('Set or update the default server rules.')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
       .addStringOption(option =>
         option
           .setName('title')
@@ -47,6 +55,7 @@ async function deployCommands() {
     new SlashCommandBuilder()
       .setName('setserverrules')
       .setDescription('Set or update the default server rules.')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
       .addStringOption(option =>
         option
           .setName('title')
@@ -63,6 +72,7 @@ async function deployCommands() {
     new SlashCommandBuilder()
       .setName('rulespanel')
       .setDescription('Open a form to create a custom rules panel.')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
       .addChannelOption(option =>
         option
           .setName('channel')
@@ -74,6 +84,7 @@ async function deployCommands() {
     new SlashCommandBuilder()
       .setName('ticketpanel')
       .setDescription('Send the suggestion panel to a channel.')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
       .addChannelOption(option =>
         option
           .setName('channel')
@@ -85,6 +96,7 @@ async function deployCommands() {
     new SlashCommandBuilder()
       .setName('verifypanel')
       .setDescription('Send the verification panel to a channel.')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
       .addChannelOption(option =>
         option
           .setName('channel')
@@ -95,26 +107,28 @@ async function deployCommands() {
 
     new SlashCommandBuilder()
       .setName('suggestion')
-      .setDescription('Open the suggestion form.'),
+      .setDescription('Open the suggestion form.')
+
   ].map(command => command.toJSON());
 
   const rest = new REST({ version: '10' }).setToken(token);
 
-  console.log(`Started refreshing ${commands.length} application (/) commands.`);
+  console.log(`🔄 Started refreshing ${commands.length} application (/) commands.`);
 
   await rest.put(
     Routes.applicationGuildCommands(clientId, guildId),
     { body: commands }
   );
 
-  console.log('Successfully reloaded application (/) commands.');
+  console.log('✅ Successfully reloaded application (/) commands.');
 }
 
 module.exports = { deployCommands };
 
+// optional manual run
 if (require.main === module) {
   deployCommands().catch(error => {
-    console.error('Error while deploying commands:', error);
+    console.error('❌ Error while deploying commands:', error);
     process.exit(1);
   });
 }
