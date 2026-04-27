@@ -27,6 +27,8 @@ const client = new Client({
 });
 
 const EMBED_COLOR = 0x5b2a86;
+const DEFAULT_RULES_COLOR = '#5B2A86';
+const EDIT_RULES_MODAL_PREFIX = 'edit_rules_modal_';
 
 const CONFIG = {
   token: process.env.DISCORD_TOKEN || '',
@@ -82,6 +84,7 @@ function ensureDataFiles() {
             '3. No abusive language.\n' +
             '4. Follow staff instructions.\n' +
             '5. Have fun.',
+          color: DEFAULT_RULES_COLOR,
         },
         null,
         2
@@ -102,8 +105,22 @@ function clampText(text, maxLength) {
   return text.length > maxLength ? text.slice(0, maxLength) : text;
 }
 
-function normalizeHexColor() {
-  return '#5B2A86';
+function parseHexColor(input) {
+  const raw = safeString(input, '').replace('#', '').trim();
+
+  if (!raw) return EMBED_COLOR;
+  if (!/^[0-9a-fA-F]{6}$/.test(raw)) return EMBED_COLOR;
+
+  return parseInt(raw, 16);
+}
+
+function normalizeHexColor(input = DEFAULT_RULES_COLOR) {
+  const raw = safeString(input, DEFAULT_RULES_COLOR).replace('#', '').trim();
+
+  if (!raw) return DEFAULT_RULES_COLOR;
+  if (!/^[0-9a-fA-F]{6}$/.test(raw)) return DEFAULT_RULES_COLOR;
+
+  return `#${raw.toUpperCase()}`;
 }
 
 function parseRoleIds(value) {
@@ -147,6 +164,7 @@ function getRulesData() {
       '3. No abusive language.\n' +
       '4. Follow staff instructions.\n' +
       '5. Have fun.',
+    color: DEFAULT_RULES_COLOR,
   };
 
   try {
@@ -158,6 +176,7 @@ function getRulesData() {
     return {
       title: safeString(parsed.title, fallback.title),
       text: safeString(parsed.text, fallback.text),
+      color: normalizeHexColor(parsed.color || fallback.color),
     };
   } catch (error) {
     console.error('Failed to read rules file:', error);
@@ -175,6 +194,7 @@ function saveRulesData(data) {
         {
           title: safeString(data.title, 'Server Rules'),
           text: safeString(data.text, ''),
+          color: normalizeHexColor(data.color || DEFAULT_RULES_COLOR),
         },
         null,
         2
@@ -264,23 +284,25 @@ async function replyWithError(interaction, content) {
   }).catch(() => null);
 }
 
-function buildRulesEmbeds(title, text) {
+function buildRulesEmbeds(title, text, colorInput = DEFAULT_RULES_COLOR) {
   const chunks = splitTextIntoChunks(text, 4000);
+  const color = parseHexColor(colorInput);
+  const normalizedColor = normalizeHexColor(colorInput);
 
   return chunks.map((chunk, index) => {
     return new EmbedBuilder()
-      .setColor(EMBED_COLOR)
+      .setColor(color)
       .setTitle(index === 0 ? `📜 ${title}` : `📜 ${title} (${index + 1})`)
       .setDescription(chunk)
       .setFooter({
-        text: `${CONFIG.serverName} • Rules Panel • ${normalizeHexColor()}`,
+        text: `${CONFIG.serverName} • Rules Panel • ${normalizedColor}`,
       });
   });
 }
 
 function buildDefaultRulesEmbeds() {
   const rules = getRulesData();
-  return buildRulesEmbeds(rules.title, rules.text);
+  return buildRulesEmbeds(rules.title, rules.text, rules.color);
 }
 
 function buildRulesModal(channelId) {
@@ -298,7 +320,7 @@ function buildRulesModal(channelId) {
 
   const colorInput = new TextInputBuilder()
     .setCustomId('color')
-    .setLabel('Embed Color (not used, theme is fixed)')
+    .setLabel('Embed Color Hex')
     .setStyle(TextInputStyle.Short)
     .setRequired(false)
     .setMaxLength(7)
@@ -313,6 +335,58 @@ function buildRulesModal(channelId) {
     .setPlaceholder(
       'Write your rules here.\n\nYou can use multiple lines, empty lines, and bullet points.'
     );
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(titleInput),
+    new ActionRowBuilder().addComponents(colorInput),
+    new ActionRowBuilder().addComponents(textInput)
+  );
+
+  return modal;
+}
+
+function cleanEmbedTitle(title) {
+  return safeString(title, 'Rules Panel')
+    .replace(/^📜\s*/, '')
+    .replace(/\s\(\d+\)$/, '');
+}
+
+function getColorFromEmbed(embed) {
+  if (!embed || typeof embed.color !== 'number') {
+    return DEFAULT_RULES_COLOR;
+  }
+
+  return `#${embed.color.toString(16).padStart(6, '0').toUpperCase()}`;
+}
+
+function buildEditRulesModal(channelId, messageId, existingTitle, existingText, existingColor) {
+  const modal = new ModalBuilder()
+    .setCustomId(`${EDIT_RULES_MODAL_PREFIX}${channelId}_${messageId}`)
+    .setTitle('Edit Rules Panel');
+
+  const titleInput = new TextInputBuilder()
+    .setCustomId('title')
+    .setLabel('Panel Title')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setMaxLength(100)
+    .setValue(cleanEmbedTitle(existingTitle));
+
+  const colorInput = new TextInputBuilder()
+    .setCustomId('color')
+    .setLabel('Embed Color Hex')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false)
+    .setMaxLength(7)
+    .setValue(normalizeHexColor(existingColor));
+
+  const textInput = new TextInputBuilder()
+    .setCustomId('text')
+    .setLabel('Rules Text')
+    .setStyle(TextInputStyle.Paragraph)
+    .setRequired(true)
+    .setMaxLength(4000)
+    .setValue(clampText(existingText, 4000));
 
   modal.addComponents(
     new ActionRowBuilder().addComponents(titleInput),
@@ -684,8 +758,9 @@ client.on(Events.InteractionCreate, async interaction => {
       if (interaction.commandName === 'setrules' || interaction.commandName === 'setserverrules') {
         const title = interaction.options.getString('title') || 'Server Rules';
         const text = interaction.options.getString('text');
+        const color = interaction.options.getString('color') || DEFAULT_RULES_COLOR;
 
-        const success = saveRulesData({ title, text });
+        const success = saveRulesData({ title, text, color });
 
         if (!success) {
           await interaction.reply({
@@ -696,7 +771,9 @@ client.on(Events.InteractionCreate, async interaction => {
         }
 
         await interaction.reply({
-          content: '✅ Default rules updated successfully.',
+          content:
+            `✅ Default rules updated successfully.\n` +
+            `Color: ${normalizeHexColor(color)}`,
           flags: MessageFlags.Ephemeral,
         });
         return;
@@ -727,6 +804,65 @@ client.on(Events.InteractionCreate, async interaction => {
         }
 
         await interaction.showModal(buildRulesModal(channel.id));
+        return;
+      }
+
+      if (interaction.commandName === 'editrulespanel') {
+        const channel = interaction.options.getChannel('channel');
+        const messageId = interaction.options.getString('message_id');
+
+        if (!channel || !channel.isTextBased()) {
+          await interaction.reply({
+            content: 'Please select a valid text channel.',
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        const message = await channel.messages.fetch(messageId).catch(() => null);
+
+        if (!message) {
+          await interaction.reply({
+            content: 'I could not find a message with that ID in the selected channel.',
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        if (message.author.id !== client.user.id) {
+          await interaction.reply({
+            content: 'I can only edit rules panels that were sent by this bot.',
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        const firstEmbed = message.embeds[0];
+
+        if (!firstEmbed) {
+          await interaction.reply({
+            content: 'That message does not contain an embed.',
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        const existingTitle = firstEmbed.title || 'Rules Panel';
+        const existingColor = getColorFromEmbed(firstEmbed);
+        const existingText = message.embeds
+          .map(embed => embed.description || '')
+          .filter(Boolean)
+          .join('\n');
+
+        await interaction.showModal(
+          buildEditRulesModal(
+            channel.id,
+            message.id,
+            existingTitle,
+            existingText,
+            existingColor
+          )
+        );
         return;
       }
 
@@ -894,16 +1030,11 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
-      const title = safeString(
-        interaction.fields.getTextInputValue('title'),
-        'Rules Panel'
-      );
-      const text = safeString(
-        interaction.fields.getTextInputValue('text'),
-        'No rules text provided.'
-      );
+      const title = safeString(interaction.fields.getTextInputValue('title'), 'Rules Panel');
+      const text = safeString(interaction.fields.getTextInputValue('text'), 'No rules text provided.');
+      const color = safeString(interaction.fields.getTextInputValue('color'), DEFAULT_RULES_COLOR);
 
-      const embeds = buildRulesEmbeds(title, text);
+      const embeds = buildRulesEmbeds(title, text, color);
 
       await channel.send({ embeds });
 
@@ -911,9 +1042,64 @@ client.on(Events.InteractionCreate, async interaction => {
         content:
           `✅ Rules panel sent to ${channel}.\n` +
           `Title: ${title}\n` +
-          `Color: ${normalizeHexColor()}`,
+          `Color: ${normalizeHexColor(color)}`,
         flags: MessageFlags.Ephemeral,
       });
+      return;
+    }
+
+    if (
+      interaction.type === InteractionType.ModalSubmit &&
+      interaction.customId.startsWith(EDIT_RULES_MODAL_PREFIX)
+    ) {
+      const parts = interaction.customId.replace(EDIT_RULES_MODAL_PREFIX, '').split('_');
+      const channelId = parts[0];
+      const messageId = parts[1];
+
+      const channel = await interaction.guild.channels.fetch(channelId).catch(() => null);
+
+      if (!channel || !channel.isTextBased()) {
+        await interaction.reply({
+          content: 'Channel not found.',
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      const message = await channel.messages.fetch(messageId).catch(() => null);
+
+      if (!message) {
+        await interaction.reply({
+          content: 'Message not found.',
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      if (message.author.id !== client.user.id) {
+        await interaction.reply({
+          content: 'I can only edit rules panels that were sent by this bot.',
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      const title = safeString(interaction.fields.getTextInputValue('title'), 'Rules Panel');
+      const text = safeString(interaction.fields.getTextInputValue('text'), 'No rules text provided.');
+      const color = safeString(interaction.fields.getTextInputValue('color'), DEFAULT_RULES_COLOR);
+
+      const embeds = buildRulesEmbeds(title, text, color);
+
+      await message.edit({ embeds });
+
+      await interaction.reply({
+        content:
+          `✅ Rules panel updated in ${channel}.\n` +
+          `Title: ${title}\n` +
+          `Color: ${normalizeHexColor(color)}`,
+        flags: MessageFlags.Ephemeral,
+      });
+
       return;
     }
 
@@ -933,18 +1119,9 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
-      const title = safeString(
-        interaction.fields.getTextInputValue('title'),
-        'No title'
-      );
-      const category = safeString(
-        interaction.fields.getTextInputValue('category'),
-        'None'
-      );
-      const description = safeString(
-        interaction.fields.getTextInputValue('description'),
-        'No description'
-      );
+      const title = safeString(interaction.fields.getTextInputValue('title'), 'No title');
+      const category = safeString(interaction.fields.getTextInputValue('category'), 'None');
+      const description = safeString(interaction.fields.getTextInputValue('description'), 'No description');
 
       const priority = getSuggestionPriority(interaction.member);
 
