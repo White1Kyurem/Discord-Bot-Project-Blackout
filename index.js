@@ -30,6 +30,7 @@ const client = new Client({
 const EMBED_COLOR = 0x5b2a86;
 const DEFAULT_RULES_COLOR = '#5B2A86';
 const EDIT_RULES_MODAL_PREFIX = 'edit_rules_modal_';
+const CUSTOM_EMBED_MODAL_PREFIX = 'custom_embed_modal_';
 
 const CONFIG = {
   token: process.env.DISCORD_TOKEN || '',
@@ -341,6 +342,62 @@ function buildRulesModal(channelId) {
     new ActionRowBuilder().addComponents(titleInput),
     new ActionRowBuilder().addComponents(colorInput),
     new ActionRowBuilder().addComponents(textInput)
+  );
+
+  return modal;
+}
+
+function buildCustomEmbedModal(channelId) {
+  const modal = new ModalBuilder()
+    .setCustomId(`${CUSTOM_EMBED_MODAL_PREFIX}${channelId}`)
+    .setTitle('Create Custom Embed');
+
+  const titleInput = new TextInputBuilder()
+    .setCustomId('title')
+    .setLabel('Embed Title')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setMaxLength(100)
+    .setPlaceholder('Example: PvP Event Tonight');
+
+  const colorInput = new TextInputBuilder()
+    .setCustomId('color')
+    .setLabel('Embed Color Hex')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false)
+    .setMaxLength(7)
+    .setPlaceholder('#5B2A86');
+
+  const textInput = new TextInputBuilder()
+    .setCustomId('text')
+    .setLabel('Embed Text')
+    .setStyle(TextInputStyle.Paragraph)
+    .setRequired(true)
+    .setMaxLength(3000)
+    .setPlaceholder('Write your event announcement here...');
+
+  const imageInput = new TextInputBuilder()
+    .setCustomId('image')
+    .setLabel('Image URL Optional')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false)
+    .setMaxLength(500)
+    .setPlaceholder('https://example.com/image.png');
+
+  const footerInput = new TextInputBuilder()
+    .setCustomId('footer')
+    .setLabel('Footer Optional')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false)
+    .setMaxLength(100)
+    .setPlaceholder(CONFIG.serverName);
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(titleInput),
+    new ActionRowBuilder().addComponents(colorInput),
+    new ActionRowBuilder().addComponents(textInput),
+    new ActionRowBuilder().addComponents(imageInput),
+    new ActionRowBuilder().addComponents(footerInput)
   );
 
   return modal;
@@ -1029,6 +1086,32 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
+      if (interaction.commandName === 'embedpanel') {
+        const channel = interaction.options.getChannel('channel');
+
+        if (!channel || !channel.isTextBased()) {
+          await interaction.reply({
+            content: '❌ Please select a valid text channel.',
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        const me = interaction.guild?.members?.me;
+        const missing = me ? getMissingChannelPermissions(channel, me) : ['Unknown'];
+
+        if (missing.length) {
+          await interaction.reply({
+            content: `I cannot send embeds to ${channel}.\nMissing permissions: ${missing.join(', ')}`,
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        await interaction.showModal(buildCustomEmbedModal(channel.id));
+        return;
+      }
+
       if (interaction.commandName === 'donation') {
         await interaction.deferReply({
           flags: MessageFlags.Ephemeral,
@@ -1225,6 +1308,48 @@ client.on(Events.InteractionCreate, async interaction => {
 
       await interaction.reply({
         content: '✅ You have been verified successfully.',
+        flags: MessageFlags.Ephemeral,
+      });
+
+      return;
+    }
+
+    if (
+      interaction.type === InteractionType.ModalSubmit &&
+      interaction.customId.startsWith(CUSTOM_EMBED_MODAL_PREFIX)
+    ) {
+      const channelId = interaction.customId.replace(CUSTOM_EMBED_MODAL_PREFIX, '');
+      const channel = await interaction.guild.channels.fetch(channelId).catch(() => null);
+
+      if (!channel || !channel.isTextBased()) {
+        await interaction.reply({
+          content: '❌ Channel not found.',
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      const title = safeString(interaction.fields.getTextInputValue('title'), 'Announcement');
+      const color = safeString(interaction.fields.getTextInputValue('color'), DEFAULT_RULES_COLOR);
+      const text = safeString(interaction.fields.getTextInputValue('text'), 'No text provided.');
+      const image = safeString(interaction.fields.getTextInputValue('image'), '');
+      const footer = safeString(interaction.fields.getTextInputValue('footer'), CONFIG.serverName);
+
+      const embed = new EmbedBuilder()
+        .setColor(parseHexColor(color))
+        .setTitle(title)
+        .setDescription(text)
+        .setFooter({ text: footer })
+        .setTimestamp();
+
+      if (image.startsWith('http://') || image.startsWith('https://')) {
+        embed.setImage(image);
+      }
+
+      await channel.send({ embeds: [embed] });
+
+      await interaction.reply({
+        content: `✅ Custom embed sent to ${channel}.`,
         flags: MessageFlags.Ephemeral,
       });
 
