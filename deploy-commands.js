@@ -34,6 +34,10 @@ async function deployCommands() {
       .setDescription('Show the default server rules.'),
 
     new SlashCommandBuilder()
+      .setName('sendrulespanels')
+      .setDescription('Send all saved rules panels to their assigned channels.'),
+
+    new SlashCommandBuilder()
       .setName('setrules')
       .setDescription('Set or update the default server rules.')
       .addStringOption(option =>
