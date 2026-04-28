@@ -18,6 +18,7 @@ const {
   PermissionsBitField,
   ActivityType,
   MessageFlags,
+  ChannelType,
 } = require('discord.js');
 
 const { deployCommands } = require('./deploy-commands');
@@ -57,10 +58,15 @@ const CONFIG = {
 
   priorityHighRoleIds: process.env.PRIORITY_HIGH_ROLE_IDS || '',
   priorityMediumRoleIds: process.env.PRIORITY_MEDIUM_ROLE_IDS || '',
+
+  donationForumChannelId: process.env.DONATION_FORUM_CHANNEL_ID || '',
+  donationGoalAmount: Number(process.env.DONATION_GOAL_AMOUNT || 500),
+  donationCurrencySymbol: process.env.DONATION_CURRENCY_SYMBOL || '€',
 };
 
 const DATA_DIR = path.join(__dirname, 'data');
 const RULES_FILE = path.join(DATA_DIR, 'rules.json');
+const DONATION_FILE = path.join(DATA_DIR, 'donation-progress.json');
 
 const PANEL_BUTTON_ID = 'open_suggestion_modal';
 const VERIFY_BUTTON_ID = 'verify_user_button';
@@ -92,6 +98,26 @@ function ensureDataFiles() {
       'utf8'
     );
   }
+
+  if (!fs.existsSync(DONATION_FILE)) {
+    fs.writeFileSync(
+      DONATION_FILE,
+      JSON.stringify(
+        {
+          currentAmount: 0,
+          goalAmount: CONFIG.donationGoalAmount,
+          currencySymbol: CONFIG.donationCurrencySymbol,
+          forumChannelId: CONFIG.donationForumChannelId,
+          threadId: '',
+          messageId: '',
+          lastDonation: null,
+        },
+        null,
+        2
+      ),
+      'utf8'
+    );
+  }
 }
 
 function safeString(value, fallback = '') {
@@ -107,19 +133,15 @@ function clampText(text, maxLength) {
 
 function parseHexColor(input) {
   const raw = safeString(input, '').replace('#', '').trim();
-
   if (!raw) return EMBED_COLOR;
   if (!/^[0-9a-fA-F]{6}$/.test(raw)) return EMBED_COLOR;
-
   return parseInt(raw, 16);
 }
 
 function normalizeHexColor(input = DEFAULT_RULES_COLOR) {
   const raw = safeString(input, DEFAULT_RULES_COLOR).replace('#', '').trim();
-
   if (!raw) return DEFAULT_RULES_COLOR;
   if (!/^[0-9a-fA-F]{6}$/.test(raw)) return DEFAULT_RULES_COLOR;
-
   return `#${raw.toUpperCase()}`;
 }
 
@@ -131,20 +153,13 @@ function parseRoleIds(value) {
 }
 
 function getSuggestionPriority(member) {
-  if (!member || !member.roles || !member.roles.cache) {
-    return 'NORMAL';
-  }
+  if (!member || !member.roles || !member.roles.cache) return 'NORMAL';
 
   const highRoleIds = parseRoleIds(CONFIG.priorityHighRoleIds);
   const mediumRoleIds = parseRoleIds(CONFIG.priorityMediumRoleIds);
 
-  if (member.roles.cache.some(role => highRoleIds.includes(role.id))) {
-    return 'HIGH';
-  }
-
-  if (member.roles.cache.some(role => mediumRoleIds.includes(role.id))) {
-    return 'MEDIUM';
-  }
+  if (member.roles.cache.some(role => highRoleIds.includes(role.id))) return 'HIGH';
+  if (member.roles.cache.some(role => mediumRoleIds.includes(role.id))) return 'MEDIUM';
 
   return 'NORMAL';
 }
@@ -169,7 +184,6 @@ function getRulesData() {
 
   try {
     ensureDataFiles();
-
     const raw = fs.readFileSync(RULES_FILE, 'utf8');
     const parsed = JSON.parse(raw);
 
@@ -240,10 +254,7 @@ function splitTextIntoChunks(text, maxLength = 4000) {
     current = remaining;
   }
 
-  if (current) {
-    chunks.push(current);
-  }
-
+  if (current) chunks.push(current);
   return chunks.length ? chunks : ['No content provided.'];
 }
 
@@ -253,17 +264,9 @@ function getMissingChannelPermissions(channel, me) {
 
   const missing = [];
 
-  if (!perms.has(PermissionsBitField.Flags.ViewChannel)) {
-    missing.push('ViewChannel');
-  }
-
-  if (!perms.has(PermissionsBitField.Flags.SendMessages)) {
-    missing.push('SendMessages');
-  }
-
-  if (!perms.has(PermissionsBitField.Flags.EmbedLinks)) {
-    missing.push('EmbedLinks');
-  }
+  if (!perms.has(PermissionsBitField.Flags.ViewChannel)) missing.push('ViewChannel');
+  if (!perms.has(PermissionsBitField.Flags.SendMessages)) missing.push('SendMessages');
+  if (!perms.has(PermissionsBitField.Flags.EmbedLinks)) missing.push('EmbedLinks');
 
   return missing;
 }
@@ -332,9 +335,7 @@ function buildRulesModal(channelId) {
     .setStyle(TextInputStyle.Paragraph)
     .setRequired(true)
     .setMaxLength(4000)
-    .setPlaceholder(
-      'Write your rules here.\n\nYou can use multiple lines, empty lines, and bullet points.'
-    );
+    .setPlaceholder('Write your rules here.\n\nYou can use multiple lines, empty lines, and bullet points.');
 
   modal.addComponents(
     new ActionRowBuilder().addComponents(titleInput),
@@ -352,10 +353,7 @@ function cleanEmbedTitle(title) {
 }
 
 function getColorFromEmbed(embed) {
-  if (!embed || typeof embed.color !== 'number') {
-    return DEFAULT_RULES_COLOR;
-  }
-
+  if (!embed || typeof embed.color !== 'number') return DEFAULT_RULES_COLOR;
   return `#${embed.color.toString(16).padStart(6, '0').toUpperCase()}`;
 }
 
@@ -497,10 +495,7 @@ async function findTrelloListId() {
     item => item.name.toLowerCase() === CONFIG.trelloTargetListName.toLowerCase()
   );
 
-  if (!list) {
-    throw new Error(`Trello list "${CONFIG.trelloTargetListName}" was not found.`);
-  }
-
+  if (!list) throw new Error(`Trello list "${CONFIG.trelloTargetListName}" was not found.`);
   return list.id;
 }
 
@@ -520,9 +515,7 @@ async function findOrCreateTrelloLabel(labelName, labelColor) {
     label => label.name.toLowerCase() === labelName.toLowerCase()
   );
 
-  if (existingLabel) {
-    return existingLabel.id;
-  }
+  if (existingLabel) return existingLabel.id;
 
   const createdLabel = await axios.post('https://api.trello.com/1/labels', null, {
     params: {
@@ -579,9 +572,7 @@ async function createSuggestionCard(data) {
     desc,
   };
 
-  if (labelId) {
-    params.idLabels = labelId;
-  }
+  if (labelId) params.idLabels = labelId;
 
   const response = await axios.post('https://api.trello.com/1/cards', null, {
     params,
@@ -594,43 +585,19 @@ async function createSuggestionCard(data) {
 async function sendSuggestionLog(interaction, title, category, description, cardUrl, priority = 'NORMAL') {
   if (!CONFIG.logChannelId || !interaction.guild) return;
 
-  const channel = await interaction.guild.channels
-    .fetch(CONFIG.logChannelId)
-    .catch(() => null);
-
+  const channel = await interaction.guild.channels.fetch(CONFIG.logChannelId).catch(() => null);
   if (!channel || !channel.isTextBased()) return;
 
   const embed = new EmbedBuilder()
     .setColor(getPriorityColor(priority))
     .setTitle('New Suggestion')
     .addFields(
-      {
-        name: 'User',
-        value: `${interaction.user.tag} (${interaction.user.id})`,
-      },
-      {
-        name: 'Priority',
-        value: priority || 'NORMAL',
-        inline: true,
-      },
-      {
-        name: 'Category',
-        value: category || 'None',
-        inline: true,
-      },
-      {
-        name: 'Title',
-        value: title,
-        inline: true,
-      },
-      {
-        name: 'Description',
-        value: clampText(description, 1024),
-      },
-      {
-        name: 'Trello Card',
-        value: cardUrl || 'Created',
-      }
+      { name: 'User', value: `${interaction.user.tag} (${interaction.user.id})` },
+      { name: 'Priority', value: priority || 'NORMAL', inline: true },
+      { name: 'Category', value: category || 'None', inline: true },
+      { name: 'Title', value: title, inline: true },
+      { name: 'Description', value: clampText(description, 1024) },
+      { name: 'Trello Card', value: cardUrl || 'Created' }
     )
     .setTimestamp();
 
@@ -647,9 +614,7 @@ function buildVerifyPanel() {
     )
     .setFooter({ text: `${CONFIG.serverName} • Verification` });
 
-  if (safeString(CONFIG.verifyImageUrl)) {
-    embed.setImage(CONFIG.verifyImageUrl);
-  }
+  if (safeString(CONFIG.verifyImageUrl)) embed.setImage(CONFIG.verifyImageUrl);
 
   const button = new ButtonBuilder()
     .setCustomId(VERIFY_BUTTON_ID)
@@ -665,20 +630,14 @@ function buildVerifyPanel() {
 async function sendVerifyLog(member) {
   if (!CONFIG.verifyLogChannelId) return;
 
-  const channel = await member.guild.channels
-    .fetch(CONFIG.verifyLogChannelId)
-    .catch(() => null);
-
+  const channel = await member.guild.channels.fetch(CONFIG.verifyLogChannelId).catch(() => null);
   if (!channel || !channel.isTextBased()) return;
 
   const embed = new EmbedBuilder()
     .setColor(EMBED_COLOR)
     .setTitle('✅ User Verified')
     .addFields(
-      {
-        name: 'User',
-        value: `${member.user.tag} (${member.id})`,
-      },
+      { name: 'User', value: `${member.user.tag} (${member.id})` },
       {
         name: 'Verified Role',
         value: CONFIG.verifyRoleId ? `<@&${CONFIG.verifyRoleId}>` : 'Not configured',
@@ -708,12 +667,164 @@ function buildWelcomeEmbed(member) {
     .setFooter({ text: CONFIG.serverName })
     .setTimestamp();
 
-  if (safeString(CONFIG.welcomeImageUrl)) {
-    embed.setImage(CONFIG.welcomeImageUrl);
+  if (safeString(CONFIG.welcomeImageUrl)) embed.setImage(CONFIG.welcomeImageUrl);
+  return embed;
+}
+
+/* =========================
+   DONATION SYSTEM
+========================= */
+
+function getDonationData() {
+  ensureDataFiles();
+
+  try {
+    const raw = fs.readFileSync(DONATION_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+
+    return {
+      currentAmount: Number(parsed.currentAmount || 0),
+      goalAmount: Number(parsed.goalAmount || CONFIG.donationGoalAmount),
+      currencySymbol: safeString(parsed.currencySymbol, CONFIG.donationCurrencySymbol),
+      forumChannelId: safeString(parsed.forumChannelId, CONFIG.donationForumChannelId),
+      threadId: safeString(parsed.threadId, ''),
+      messageId: safeString(parsed.messageId, ''),
+      lastDonation: parsed.lastDonation || null,
+    };
+  } catch (error) {
+    console.error('Failed to read donation file:', error);
+
+    return {
+      currentAmount: 0,
+      goalAmount: CONFIG.donationGoalAmount,
+      currencySymbol: CONFIG.donationCurrencySymbol,
+      forumChannelId: CONFIG.donationForumChannelId,
+      threadId: '',
+      messageId: '',
+      lastDonation: null,
+    };
+  }
+}
+
+function saveDonationData(data) {
+  ensureDataFiles();
+  fs.writeFileSync(DONATION_FILE, JSON.stringify(data, null, 2), 'utf8');
+}
+
+function buildDonationProgressBar(current, goal, size = 18) {
+  const safeGoal = Math.max(Number(goal || 0), 1);
+  const percent = Math.min(Math.max(Number(current || 0) / safeGoal, 0), 1);
+  const filled = Math.round(size * percent);
+
+  return '▰'.repeat(filled) + '▱'.repeat(size - filled);
+}
+
+function buildDonationEmbed(data) {
+  const current = Number(data.currentAmount || 0);
+  const goal = Math.max(Number(data.goalAmount || CONFIG.donationGoalAmount), 1);
+  const currency = safeString(data.currencySymbol, CONFIG.donationCurrencySymbol);
+  const percentNumber = Math.min((current / goal) * 100, 100);
+  const remaining = Math.max(goal - current, 0);
+
+  const embed = new EmbedBuilder()
+    .setColor(0x7c3aed)
+    .setTitle('💎 Support Project Blackout')
+    .setDescription(
+      [
+        '> Help us grow the server and improve the experience for everyone.',
+        '',
+        '**Donation Progress**',
+        `\`${buildDonationProgressBar(current, goal)}\` **${percentNumber.toFixed(1)}%**`,
+        '',
+        `💰 **Raised:** ${current.toFixed(2)}${currency}`,
+        `🎯 **Goal:** ${goal.toFixed(2)}${currency}`,
+        `📌 **Remaining:** ${remaining.toFixed(2)}${currency}`,
+        '',
+        '✨ Every donation helps us improve Project Blackout.',
+        '❤️ Thank you for your support!',
+      ].join('\n')
+    )
+    .setFooter({ text: `${CONFIG.serverName} • Donation System` })
+    .setTimestamp();
+
+  if (data.lastDonation) {
+    embed.addFields({
+      name: '🌟 Latest Donation',
+      value:
+        `**Amount:** ${Number(data.lastDonation.amount || 0).toFixed(2)}${currency}\n` +
+        `**Donor:** ${safeString(data.lastDonation.donor, 'Unknown')}\n` +
+        `**Note:** ${safeString(data.lastDonation.note, 'No note')}`,
+    });
   }
 
   return embed;
 }
+
+async function ensureDonationPost(interaction, data) {
+  const forumChannelId = safeString(data.forumChannelId, CONFIG.donationForumChannelId);
+
+  if (!forumChannelId) {
+    throw new Error('DONATION_FORUM_CHANNEL_ID is not configured.');
+  }
+
+  const forum = await interaction.guild.channels.fetch(forumChannelId).catch(() => null);
+
+  if (!forum || forum.type !== ChannelType.GuildForum) {
+    throw new Error('The configured donation channel is not a forum channel.');
+  }
+
+  if (data.threadId && data.messageId) {
+    const existingThread = await interaction.guild.channels.fetch(data.threadId).catch(() => null);
+
+    if (existingThread) {
+      const existingMessage = await existingThread.messages.fetch(data.messageId).catch(() => null);
+
+      if (existingMessage) {
+        await existingMessage.edit({
+          embeds: [buildDonationEmbed(data)],
+        });
+
+        return data;
+      }
+    }
+  }
+
+  const thread = await forum.threads.create({
+    name: '💎 Donation Progress',
+    message: {
+      embeds: [buildDonationEmbed(data)],
+    },
+  });
+
+  const starterMessage = await thread.fetchStarterMessage();
+
+  data.threadId = thread.id;
+  data.messageId = starterMessage.id;
+
+  saveDonationData(data);
+
+  return data;
+}
+
+async function updateDonationPost(interaction, data) {
+  const updatedData = await ensureDonationPost(interaction, data);
+
+  const thread = await interaction.guild.channels.fetch(updatedData.threadId).catch(() => null);
+  if (!thread) throw new Error('Donation thread was not found.');
+
+  const message = await thread.messages.fetch(updatedData.messageId).catch(() => null);
+  if (!message) throw new Error('Donation message was not found.');
+
+  await message.edit({
+    embeds: [buildDonationEmbed(updatedData)],
+  });
+
+  return updatedData;
+}
+
+/* =========================
+   BOT EVENTS
+========================= */
 
 client.once(Events.ClientReady, async () => {
   ensureDataFiles();
@@ -771,9 +882,7 @@ client.on(Events.InteractionCreate, async interaction => {
         }
 
         await interaction.reply({
-          content:
-            `✅ Default rules updated successfully.\n` +
-            `Color: ${normalizeHexColor(color)}`,
+          content: `✅ Default rules updated successfully.\nColor: ${normalizeHexColor(color)}`,
           flags: MessageFlags.Ephemeral,
         });
         return;
@@ -795,9 +904,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
         if (missing.length) {
           await interaction.reply({
-            content:
-              `I cannot send the rules panel to ${channel}.\n` +
-              `Missing permissions: ${missing.join(', ')}`,
+            content: `I cannot send the rules panel to ${channel}.\nMissing permissions: ${missing.join(', ')}`,
             flags: MessageFlags.Ephemeral,
           });
           return;
@@ -855,13 +962,7 @@ client.on(Events.InteractionCreate, async interaction => {
           .join('\n');
 
         await interaction.showModal(
-          buildEditRulesModal(
-            channel.id,
-            message.id,
-            existingTitle,
-            existingText,
-            existingColor
-          )
+          buildEditRulesModal(channel.id, message.id, existingTitle, existingText, existingColor)
         );
         return;
       }
@@ -882,9 +983,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
         if (missing.length) {
           await interaction.reply({
-            content:
-              `I cannot send the suggestion panel to ${channel}.\n` +
-              `Missing permissions: ${missing.join(', ')}`,
+            content: `I cannot send the suggestion panel to ${channel}.\nMissing permissions: ${missing.join(', ')}`,
             flags: MessageFlags.Ephemeral,
           });
           return;
@@ -915,9 +1014,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
         if (missing.length) {
           await interaction.reply({
-            content:
-              `I cannot send the verify panel to ${channel}.\n` +
-              `Missing permissions: ${missing.join(', ')}`,
+            content: `I cannot send the verify panel to ${channel}.\nMissing permissions: ${missing.join(', ')}`,
             flags: MessageFlags.Ephemeral,
           });
           return;
@@ -930,6 +1027,138 @@ client.on(Events.InteractionCreate, async interaction => {
           flags: MessageFlags.Ephemeral,
         });
         return;
+      }
+
+      if (interaction.commandName === 'donation') {
+        await interaction.deferReply({
+          flags: MessageFlags.Ephemeral,
+        });
+
+        const subcommand = interaction.options.getSubcommand();
+        const data = getDonationData();
+
+        try {
+          if (subcommand === 'setup') {
+            const channel = interaction.options.getChannel('channel');
+
+            if (channel) {
+              if (channel.type !== ChannelType.GuildForum) {
+                await interaction.editReply({
+                  content: '❌ Please select a valid forum channel.',
+                });
+                return;
+              }
+
+              data.forumChannelId = channel.id;
+            }
+
+            await ensureDonationPost(interaction, data);
+            saveDonationData(data);
+
+            await interaction.editReply({
+              content: '✅ Donation progress post has been created or updated.',
+            });
+            return;
+          }
+
+          if (subcommand === 'add') {
+            const amount = interaction.options.getNumber('amount');
+            const donor = interaction.options.getString('donor') || 'Anonymous';
+            const note = interaction.options.getString('note') || 'No note';
+
+            if (!amount || amount <= 0) {
+              await interaction.editReply({
+                content: '❌ Amount must be higher than 0.',
+              });
+              return;
+            }
+
+            data.currentAmount += amount;
+            data.lastDonation = {
+              amount,
+              donor,
+              note,
+              addedBy: interaction.user.tag,
+              addedAt: new Date().toISOString(),
+            };
+
+            saveDonationData(data);
+            await updateDonationPost(interaction, data);
+
+            await interaction.editReply({
+              content: `✅ Added **${amount.toFixed(2)}${data.currencySymbol}** to the donation progress.`,
+            });
+            return;
+          }
+
+          if (subcommand === 'set') {
+            const amount = interaction.options.getNumber('amount');
+
+            if (amount < 0) {
+              await interaction.editReply({
+                content: '❌ Amount cannot be negative.',
+              });
+              return;
+            }
+
+            data.currentAmount = amount;
+            saveDonationData(data);
+            await updateDonationPost(interaction, data);
+
+            await interaction.editReply({
+              content: `✅ Donation progress set to **${amount.toFixed(2)}${data.currencySymbol}**.`,
+            });
+            return;
+          }
+
+          if (subcommand === 'goal') {
+            const amount = interaction.options.getNumber('amount');
+
+            if (!amount || amount <= 0) {
+              await interaction.editReply({
+                content: '❌ Goal must be higher than 0.',
+              });
+              return;
+            }
+
+            data.goalAmount = amount;
+            saveDonationData(data);
+            await updateDonationPost(interaction, data);
+
+            await interaction.editReply({
+              content: `✅ Donation goal set to **${amount.toFixed(2)}${data.currencySymbol}**.`,
+            });
+            return;
+          }
+
+          if (subcommand === 'reset') {
+            data.currentAmount = 0;
+            data.lastDonation = null;
+            saveDonationData(data);
+            await updateDonationPost(interaction, data);
+
+            await interaction.editReply({
+              content: '✅ Donation progress has been reset.',
+            });
+            return;
+          }
+
+          if (subcommand === 'status') {
+            await ensureDonationPost(interaction, data);
+
+            await interaction.editReply({
+              embeds: [buildDonationEmbed(data)],
+            });
+            return;
+          }
+        } catch (error) {
+          console.error('Donation command error:', error);
+
+          await interaction.editReply({
+            content: `❌ Donation command failed: ${error.message}`,
+          });
+          return;
+        }
       }
 
       if (interaction.commandName === 'suggestion') {
@@ -1022,9 +1251,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
       if (missing.length) {
         await interaction.reply({
-          content:
-            `I cannot send the rules panel to ${channel}.\n` +
-            `Missing permissions: ${missing.join(', ')}`,
+          content: `I cannot send the rules panel to ${channel}.\nMissing permissions: ${missing.join(', ')}`,
           flags: MessageFlags.Ephemeral,
         });
         return;
@@ -1113,8 +1340,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
       if (!CONFIG.trelloKey || !CONFIG.trelloToken || !CONFIG.trelloBoardShortlink) {
         await interaction.editReply({
-          content:
-            'The suggestion system is not configured yet. Please contact an administrator.',
+          content: 'The suggestion system is not configured yet. Please contact an administrator.',
         });
         return;
       }
@@ -1137,14 +1363,7 @@ client.on(Events.InteractionCreate, async interaction => {
         });
 
         try {
-          await sendSuggestionLog(
-            interaction,
-            title,
-            category,
-            description,
-            card.shortUrl,
-            priority
-          );
+          await sendSuggestionLog(interaction, title, category, description, card.shortUrl, priority);
         } catch (logError) {
           console.error('Suggestion log error:', logError);
         }
@@ -1175,10 +1394,7 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
     const hasRoleNow = newMember.roles.cache.has(CONFIG.verifiedRoleId);
 
     if (!hadRole && hasRoleNow) {
-      const channel = await newMember.guild.channels
-        .fetch(CONFIG.welcomeChannelId)
-        .catch(() => null);
-
+      const channel = await newMember.guild.channels.fetch(CONFIG.welcomeChannelId).catch(() => null);
       if (!channel || !channel.isTextBased()) return;
 
       await channel.send({
