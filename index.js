@@ -67,6 +67,7 @@ const CONFIG = {
 
 const DATA_DIR = path.join(__dirname, 'data');
 const RULES_FILE = path.join(DATA_DIR, 'rules.json');
+const RULES_PANELS_FILE = path.join(DATA_DIR, 'rules-panels.json');
 const DONATION_FILE = path.join(DATA_DIR, 'donation-progress.json');
 
 const PANEL_BUTTON_ID = 'open_suggestion_modal';
@@ -98,6 +99,10 @@ function ensureDataFiles() {
       ),
       'utf8'
     );
+  }
+
+  if (!fs.existsSync(RULES_PANELS_FILE)) {
+    fs.writeFileSync(RULES_PANELS_FILE, JSON.stringify([], null, 2), 'utf8');
   }
 
   if (!fs.existsSync(DONATION_FILE)) {
@@ -222,6 +227,42 @@ function saveRulesData(data) {
     console.error('Failed to save rules file:', error);
     return false;
   }
+}
+
+function getSavedRulesPanels() {
+  try {
+    ensureDataFiles();
+    const raw = fs.readFileSync(RULES_PANELS_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    console.error('Failed to read saved rules panels:', error);
+    return [];
+  }
+}
+
+function saveRulesPanels(panels) {
+  try {
+    ensureDataFiles();
+    fs.writeFileSync(RULES_PANELS_FILE, JSON.stringify(panels, null, 2), 'utf8');
+    return true;
+  } catch (error) {
+    console.error('Failed to save rules panels:', error);
+    return false;
+  }
+}
+
+function upsertRulesPanel(panel) {
+  const panels = getSavedRulesPanels();
+  const index = panels.findIndex(item => item.messageId === panel.messageId);
+
+  if (index >= 0) {
+    panels[index] = panel;
+  } else {
+    panels.push(panel);
+  }
+
+  return saveRulesPanels(panels);
 }
 
 function splitTextIntoChunks(text, maxLength = 4000) {
@@ -923,6 +964,60 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
+      if (interaction.commandName === 'sendrulespanels') {
+        const panels = getSavedRulesPanels();
+
+        if (!panels.length) {
+          await interaction.reply({
+            content: '❌ No saved rules panels found.',
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        await interaction.reply({
+          content: '📨 Sending all saved rules panels...',
+          flags: MessageFlags.Ephemeral,
+        });
+
+        let sentCount = 0;
+        let failedCount = 0;
+
+        for (const panel of panels) {
+          const channel = await interaction.guild.channels.fetch(panel.channelId).catch(() => null);
+
+          if (!channel || !channel.isTextBased()) {
+            failedCount++;
+            continue;
+          }
+
+          const me = interaction.guild?.members?.me;
+          const missing = me ? getMissingChannelPermissions(channel, me) : ['Unknown'];
+
+          if (missing.length) {
+            failedCount++;
+            continue;
+          }
+
+          const embeds = buildRulesEmbeds(panel.title, panel.text, panel.color);
+          const sentMessage = await channel.send({ embeds }).catch(() => null);
+
+          if (!sentMessage) {
+            failedCount++;
+            continue;
+          }
+
+          sentCount++;
+        }
+
+        await interaction.followUp({
+          content: `✅ Done.\nSent: **${sentCount}**\nFailed: **${failedCount}**`,
+          flags: MessageFlags.Ephemeral,
+        });
+
+        return;
+      }
+
       if (interaction.commandName === 'setrules' || interaction.commandName === 'setserverrules') {
         const title = interaction.options.getString('title') || 'Server Rules';
         const text = interaction.options.getString('text');
@@ -1388,7 +1483,16 @@ client.on(Events.InteractionCreate, async interaction => {
 
       const embeds = buildRulesEmbeds(title, text, color);
 
-      await channel.send({ embeds });
+      const sentMessage = await channel.send({ embeds });
+
+      upsertRulesPanel({
+        channelId: channel.id,
+        messageId: sentMessage.id,
+        title,
+        text,
+        color: normalizeHexColor(color),
+        savedAt: new Date().toISOString(),
+      });
 
       await interaction.reply({
         content:
@@ -1443,6 +1547,15 @@ client.on(Events.InteractionCreate, async interaction => {
       const embeds = buildRulesEmbeds(title, text, color);
 
       await message.edit({ embeds });
+
+      upsertRulesPanel({
+        channelId: channel.id,
+        messageId: message.id,
+        title,
+        text,
+        color: normalizeHexColor(color),
+        savedAt: new Date().toISOString(),
+      });
 
       await interaction.reply({
         content:
