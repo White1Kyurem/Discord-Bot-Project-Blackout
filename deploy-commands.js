@@ -111,6 +111,17 @@ async function deployCommands() {
       .setDescription('Open the suggestion form.'),
 
     new SlashCommandBuilder()
+      .setName('embedpanel')
+      .setDescription('Create a custom embed message with a form.')
+      .addChannelOption(option =>
+        option
+          .setName('channel')
+          .setDescription('The channel where the embed should be sent')
+          .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+          .setRequired(true)
+      ),
+
+    new SlashCommandBuilder()
       .setName('donation')
       .setDescription('Manage the donation progress post.')
       .addSubcommand(subcommand =>
