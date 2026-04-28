@@ -37,44 +37,26 @@ async function deployCommands() {
       .setName('setrules')
       .setDescription('Set or update the default server rules.')
       .addStringOption(option =>
-        option
-          .setName('title')
-          .setDescription('Title of the rules panel')
-          .setRequired(true)
+        option.setName('title').setDescription('Title of the rules panel').setRequired(true)
       )
       .addStringOption(option =>
-        option
-          .setName('text')
-          .setDescription('Rules text')
-          .setRequired(true)
+        option.setName('text').setDescription('Rules text').setRequired(true)
       )
       .addStringOption(option =>
-        option
-          .setName('color')
-          .setDescription('Embed color hex, example: #5B2A86')
-          .setRequired(false)
+        option.setName('color').setDescription('Embed color hex, example: #5B2A86').setRequired(false)
       ),
 
     new SlashCommandBuilder()
       .setName('setserverrules')
       .setDescription('Set or update the default server rules.')
       .addStringOption(option =>
-        option
-          .setName('title')
-          .setDescription('Title of the rules panel')
-          .setRequired(true)
+        option.setName('title').setDescription('Title of the rules panel').setRequired(true)
       )
       .addStringOption(option =>
-        option
-          .setName('text')
-          .setDescription('Rules text')
-          .setRequired(true)
+        option.setName('text').setDescription('Rules text').setRequired(true)
       )
       .addStringOption(option =>
-        option
-          .setName('color')
-          .setDescription('Embed color hex, example: #5B2A86')
-          .setRequired(false)
+        option.setName('color').setDescription('Embed color hex, example: #5B2A86').setRequired(false)
       ),
 
     new SlashCommandBuilder()
@@ -99,10 +81,7 @@ async function deployCommands() {
           .setRequired(true)
       )
       .addStringOption(option =>
-        option
-          .setName('message_id')
-          .setDescription('The message ID of the rules panel')
-          .setRequired(true)
+        option.setName('message_id').setDescription('The message ID of the rules panel').setRequired(true)
       ),
 
     new SlashCommandBuilder()
@@ -130,6 +109,77 @@ async function deployCommands() {
     new SlashCommandBuilder()
       .setName('suggestion')
       .setDescription('Open the suggestion form.'),
+
+    new SlashCommandBuilder()
+      .setName('donation')
+      .setDescription('Manage the donation progress post.')
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('setup')
+          .setDescription('Create or update the donation progress forum post.')
+          .addChannelOption(option =>
+            option
+              .setName('channel')
+              .setDescription('Donation forum channel')
+              .addChannelTypes(ChannelType.GuildForum)
+              .setRequired(false)
+          )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('add')
+          .setDescription('Add a donation amount.')
+          .addNumberOption(option =>
+            option
+              .setName('amount')
+              .setDescription('Donation amount')
+              .setRequired(true)
+          )
+          .addStringOption(option =>
+            option
+              .setName('donor')
+              .setDescription('Donor name')
+              .setRequired(false)
+          )
+          .addStringOption(option =>
+            option
+              .setName('note')
+              .setDescription('Donation note')
+              .setRequired(false)
+          )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('set')
+          .setDescription('Set the current donation amount.')
+          .addNumberOption(option =>
+            option
+              .setName('amount')
+              .setDescription('New current amount')
+              .setRequired(true)
+          )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('goal')
+          .setDescription('Set the donation goal.')
+          .addNumberOption(option =>
+            option
+              .setName('amount')
+              .setDescription('New goal amount')
+              .setRequired(true)
+          )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('reset')
+          .setDescription('Reset the donation progress.')
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('status')
+          .setDescription('Show the current donation status.')
+      ),
   ].map(command => command.toJSON());
 
   const rest = new REST({ version: '10' }).setToken(token);
