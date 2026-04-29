@@ -332,16 +332,12 @@ async function replyWithError(interaction, content) {
 function buildRulesEmbeds(title, text, colorInput = DEFAULT_RULES_COLOR) {
   const chunks = splitTextIntoChunks(text, 4000);
   const color = parseHexColor(colorInput);
-  const normalizedColor = normalizeHexColor(colorInput);
 
   return chunks.map((chunk, index) => {
     return new EmbedBuilder()
       .setColor(color)
       .setTitle(index === 0 ? `📜 ${title}` : `📜 ${title} (${index + 1})`)
-      .setDescription(chunk)
-      .setFooter({
-        text: `${CONFIG.serverName} • Rules Panel • ${normalizedColor}`,
-      });
+      .setDescription(chunk);
   });
 }
 
