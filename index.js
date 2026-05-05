@@ -978,12 +978,14 @@ client.on(Events.InteractionCreate, async interaction => {
 
         let sentCount = 0;
         let failedCount = 0;
+        const updatedPanels = [];
 
         for (const panel of panels) {
           const channel = await interaction.guild.channels.fetch(panel.channelId).catch(() => null);
 
           if (!channel || !channel.isTextBased()) {
             failedCount++;
+            updatedPanels.push(panel);
             continue;
           }
 
@@ -992,6 +994,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
           if (missing.length) {
             failedCount++;
+            updatedPanels.push(panel);
             continue;
           }
 
@@ -1000,14 +1003,101 @@ client.on(Events.InteractionCreate, async interaction => {
 
           if (!sentMessage) {
             failedCount++;
+            updatedPanels.push(panel);
             continue;
           }
+
+          updatedPanels.push({
+            ...panel,
+            channelId: channel.id,
+            messageId: sentMessage.id,
+            lastSentAt: new Date().toISOString(),
+          });
 
           sentCount++;
         }
 
+        saveRulesPanels(updatedPanels);
+
         await interaction.followUp({
-          content: `✅ Done.\nSent: **${sentCount}**\nFailed: **${failedCount}**`,
+          content: `✅ Done.
+Sent: **${sentCount}**
+Failed: **${failedCount}**
+💾 Saved panels remain stored permanently in data/rules-panels.json.`,
+          flags: MessageFlags.Ephemeral,
+        });
+
+        return;
+      }
+
+      if (interaction.commandName === 'saverulespanel') {
+        const channel = interaction.options.getChannel('channel');
+        const messageId = interaction.options.getString('message_id');
+
+        if (!channel || !channel.isTextBased()) {
+          await interaction.reply({
+            content: '❌ Please select a valid text channel.',
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        const message = await channel.messages.fetch(messageId).catch(() => null);
+
+        if (!message) {
+          await interaction.reply({
+            content: '❌ I could not find a message with that ID in the selected channel.',
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        if (message.author.id !== client.user.id) {
+          await interaction.reply({
+            content: '❌ I can only save rules panels that were sent by this bot.',
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        if (!message.embeds.length) {
+          await interaction.reply({
+            content: '❌ That message does not contain any embeds.',
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        const firstEmbed = message.embeds[0];
+        const title = cleanEmbedTitle(firstEmbed.title || 'Rules Panel');
+        const color = getColorFromEmbed(firstEmbed);
+        const text = message.embeds
+          .map(embed => embed.description || '')
+          .filter(Boolean)
+          .join('
+');
+
+        const success = upsertRulesPanel({
+          channelId: channel.id,
+          messageId: message.id,
+          title,
+          text,
+          color,
+          savedAt: new Date().toISOString(),
+        });
+
+        if (!success) {
+          await interaction.reply({
+            content: '❌ Failed to save this rules panel.',
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        await interaction.reply({
+          content: `✅ Rules panel saved permanently.
+Title: ${title}
+Color: ${color}`,
           flags: MessageFlags.Ephemeral,
         });
 
