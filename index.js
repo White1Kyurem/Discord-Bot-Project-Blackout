@@ -49,6 +49,7 @@ const CONFIG = {
 
   logChannelId: process.env.LOG_CHANNEL_ID || '',
   welcomeChannelId: process.env.WELCOME_CHANNEL_ID || '',
+  serverRulesChannelId: process.env.SERVER_RULES_CHANNEL_ID || '',
   verifiedRoleId: process.env.VERIFIED_ROLE_ID || '',
   welcomeImageUrl: process.env.WELCOME_IMAGE_URL || '',
 
@@ -751,18 +752,36 @@ async function sendVerifyLog(member) {
 function buildWelcomeEmbed(member) {
   const embed = new EmbedBuilder()
     .setColor(EMBED_COLOR)
-    .setTitle(`Welcome to ${CONFIG.serverName}`)
+    .setTitle(`👋 Welcome to ${CONFIG.serverName}`)
     .setDescription(
-      `Welcome ${member}!\n\n` +
-        'You are now verified and ready to join the community.\n' +
-        'Please read the rules, stay respectful, and have fun.'
+      `👋 Welcome, ${member}\n\n` +
+        `You’ve entered ${CONFIG.serverName} — a high-intensity DayZ experience.\n\n` +
+        '🔴 **24/7 Raiding**\n' +
+        '🟢 **Balanced PvP**\n' +
+        '🔵 **Custom Events & Loot**\n\n' +
+        '📜 Read the rules\n' +
+        '💬 Join the community\n' +
+        '⚔️ Build your squad\n\n' +
+        '🔥 **Survive. Fight. Dominate.**'
     )
     .setThumbnail(member.user.displayAvatarURL({ extension: 'png' }))
-    .setFooter({ text: CONFIG.serverName })
     .setTimestamp();
 
   if (safeString(CONFIG.welcomeImageUrl)) embed.setImage(CONFIG.welcomeImageUrl);
   return embed;
+}
+
+function buildWelcomeComponents(guildId) {
+  if (!safeString(CONFIG.serverRulesChannelId)) return [];
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setLabel('📜 Server Rules')
+      .setStyle(ButtonStyle.Link)
+      .setURL(`https://discord.com/channels/${guildId}/${CONFIG.serverRulesChannelId}`)
+  );
+
+  return [row];
 }
 
 /* =========================
@@ -1722,6 +1741,7 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
 
       await channel.send({
         embeds: [buildWelcomeEmbed(newMember)],
+        components: buildWelcomeComponents(newMember.guild.id),
       });
     }
   } catch (error) {
