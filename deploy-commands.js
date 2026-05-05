@@ -38,6 +38,23 @@ async function deployCommands() {
       .setDescription('Send all saved rules panels to their assigned channels.'),
 
     new SlashCommandBuilder()
+      .setName('saverulespanel')
+      .setDescription('Save an existing rules panel permanently.')
+      .addChannelOption(option =>
+        option
+          .setName('channel')
+          .setDescription('The channel where the rules panel is located')
+          .addChannelTypes(ChannelType.GuildText)
+          .setRequired(true)
+      )
+      .addStringOption(option =>
+        option
+          .setName('message_id')
+          .setDescription('The message ID of the rules panel')
+          .setRequired(true)
+      ),
+
+    new SlashCommandBuilder()
       .setName('setrules')
       .setDescription('Set or update the default server rules.')
       .addStringOption(option =>
