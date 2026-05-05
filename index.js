@@ -1074,8 +1074,7 @@ Failed: **${failedCount}**
         const text = message.embeds
           .map(embed => embed.description || '')
           .filter(Boolean)
-          .join('
-');
+          .join('\\n');
 
         const success = upsertRulesPanel({
           channelId: channel.id,
