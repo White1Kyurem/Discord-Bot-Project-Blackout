@@ -3,7 +3,6 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
-const http = require('http');
 const {
   Client,
   GatewayIntentBits,
@@ -33,23 +32,9 @@ const DEFAULT_RULES_COLOR = '#5B2A86';
 const EDIT_RULES_MODAL_PREFIX = 'edit_rules_modal_';
 const CUSTOM_EMBED_MODAL_PREFIX = 'custom_embed_modal_';
 
-
-const BOT_STATE = {
-  startedAt: new Date().toISOString(),
-  discordReady: false,
-  lastReadyAt: null,
-  lastDisconnectAt: null,
-  lastError: null,
-};
-
-let discordOfflineSince = Date.now();
-
 const CONFIG = {
-  token: (process.env.DISCORD_TOKEN || '').trim(),
+  token: process.env.DISCORD_TOKEN || '',
   serverName: process.env.SERVER_NAME || 'Project Blackout PVP',
-  port: Number(process.env.PORT || 3000),
-  discordReadyTimeoutMs: Number(process.env.DISCORD_READY_TIMEOUT_MS || 90000),
-  discordOfflineRestartMs: Number(process.env.DISCORD_OFFLINE_RESTART_MS || 300000),
 
   trelloKey: process.env.TRELLO_KEY || '',
   trelloToken: process.env.TRELLO_TOKEN || '',
@@ -57,10 +42,14 @@ const CONFIG = {
   trelloTargetListName: process.env.TRELLO_TARGET_LIST_NAME || 'Suggestions',
   trelloBoardUrl: process.env.TRELLO_BOARD_URL || 'https://trello.com/',
 
-  trelloHighPriorityLabelName: process.env.TRELLO_HIGH_PRIORITY_LABEL_NAME || 'High Priority',
-  trelloMediumPriorityLabelName: process.env.TRELLO_MEDIUM_PRIORITY_LABEL_NAME || 'Medium Priority',
-  trelloHighPriorityLabelColor: process.env.TRELLO_HIGH_PRIORITY_LABEL_COLOR || 'red',
-  trelloMediumPriorityLabelColor: process.env.TRELLO_MEDIUM_PRIORITY_LABEL_COLOR || 'yellow',
+  trelloHighPriorityLabelName:
+    process.env.TRELLO_HIGH_PRIORITY_LABEL_NAME || 'High Priority',
+  trelloMediumPriorityLabelName:
+    process.env.TRELLO_MEDIUM_PRIORITY_LABEL_NAME || 'Medium Priority',
+  trelloHighPriorityLabelColor:
+    process.env.TRELLO_HIGH_PRIORITY_LABEL_COLOR || 'red',
+  trelloMediumPriorityLabelColor:
+    process.env.TRELLO_MEDIUM_PRIORITY_LABEL_COLOR || 'yellow',
 
   logChannelId: process.env.LOG_CHANNEL_ID || '',
   welcomeChannelId: process.env.WELCOME_CHANNEL_ID || '',
@@ -81,7 +70,10 @@ const CONFIG = {
   donationCurrencySymbol: process.env.DONATION_CURRENCY_SYMBOL || '€',
 };
 
-const DATA_DIR = path.join(__dirname, 'data');
+const DATA_DIR = process.env.DATA_DIR
+  ? path.resolve(process.env.DATA_DIR)
+  : path.join(__dirname, 'data');
+
 const RULES_FILE = path.join(DATA_DIR, 'rules.json');
 const RULES_PANELS_FILE = path.join(DATA_DIR, 'rules-panels.json');
 const DONATION_FILE = path.join(DATA_DIR, 'donation-progress.json');
@@ -90,6 +82,7 @@ const PANEL_BUTTON_ID = 'open_suggestion_modal';
 const VERIFY_BUTTON_ID = 'verify_user_button';
 const SUGGESTION_MODAL_ID = 'suggestion_modal';
 const RULES_MODAL_PREFIX = 'rules_modal_';
+const DONATION_THREAD_NAME = '💎 Donation Progress';
 
 function ensureDataFiles() {
   if (!fs.existsSync(DATA_DIR)) {
@@ -180,8 +173,13 @@ function getSuggestionPriority(member) {
   const highRoleIds = parseRoleIds(CONFIG.priorityHighRoleIds);
   const mediumRoleIds = parseRoleIds(CONFIG.priorityMediumRoleIds);
 
-  if (member.roles.cache.some(role => highRoleIds.includes(role.id))) return 'HIGH';
-  if (member.roles.cache.some(role => mediumRoleIds.includes(role.id))) return 'MEDIUM';
+  if (member.roles.cache.some(role => highRoleIds.includes(role.id))) {
+    return 'HIGH';
+  }
+
+  if (member.roles.cache.some(role => mediumRoleIds.includes(role.id))) {
+    return 'MEDIUM';
+  }
 
   return 'NORMAL';
 }
@@ -260,7 +258,11 @@ function getSavedRulesPanels() {
 function saveRulesPanels(panels) {
   try {
     ensureDataFiles();
-    fs.writeFileSync(RULES_PANELS_FILE, JSON.stringify(panels, null, 2), 'utf8');
+    fs.writeFileSync(
+      RULES_PANELS_FILE,
+      JSON.stringify(panels, null, 2),
+      'utf8'
+    );
     return true;
   } catch (error) {
     console.error('Failed to save rules panels:', error);
@@ -322,27 +324,39 @@ function getMissingChannelPermissions(channel, me) {
 
   const missing = [];
 
-  if (!perms.has(PermissionsBitField.Flags.ViewChannel)) missing.push('ViewChannel');
-  if (!perms.has(PermissionsBitField.Flags.SendMessages)) missing.push('SendMessages');
-  if (!perms.has(PermissionsBitField.Flags.EmbedLinks)) missing.push('EmbedLinks');
+  if (!perms.has(PermissionsBitField.Flags.ViewChannel)) {
+    missing.push('ViewChannel');
+  }
+
+  if (!perms.has(PermissionsBitField.Flags.SendMessages)) {
+    missing.push('SendMessages');
+  }
+
+  if (!perms.has(PermissionsBitField.Flags.EmbedLinks)) {
+    missing.push('EmbedLinks');
+  }
 
   return missing;
 }
 
 async function replyWithError(interaction, content) {
   if (interaction.deferred || interaction.replied) {
-    await interaction.editReply({
-      content,
-      embeds: [],
-      components: [],
-    }).catch(() => null);
+    await interaction
+      .editReply({
+        content,
+        embeds: [],
+        components: [],
+      })
+      .catch(() => null);
     return;
   }
 
-  await interaction.reply({
-    content,
-    flags: MessageFlags.Ephemeral,
-  }).catch(() => null);
+  await interaction
+    .reply({
+      content,
+      flags: MessageFlags.Ephemeral,
+    })
+    .catch(() => null);
 }
 
 function buildRulesEmbeds(title, text, colorInput = DEFAULT_RULES_COLOR) {
@@ -389,7 +403,9 @@ function buildRulesModal(channelId) {
     .setStyle(TextInputStyle.Paragraph)
     .setRequired(true)
     .setMaxLength(4000)
-    .setPlaceholder('Write your rules here.\n\nYou can use multiple lines, empty lines, and bullet points.');
+    .setPlaceholder(
+      'Write your rules here.\n\nYou can use multiple lines, empty lines, and bullet points.'
+    );
 
   modal.addComponents(
     new ActionRowBuilder().addComponents(titleInput),
@@ -463,11 +479,20 @@ function cleanEmbedTitle(title) {
 }
 
 function getColorFromEmbed(embed) {
-  if (!embed || typeof embed.color !== 'number') return DEFAULT_RULES_COLOR;
+  if (!embed || typeof embed.color !== 'number') {
+    return DEFAULT_RULES_COLOR;
+  }
+
   return `#${embed.color.toString(16).padStart(6, '0').toUpperCase()}`;
 }
 
-function buildEditRulesModal(channelId, messageId, existingTitle, existingText, existingColor) {
+function buildEditRulesModal(
+  channelId,
+  messageId,
+  existingTitle,
+  existingText,
+  existingColor
+) {
   const modal = new ModalBuilder()
     .setCustomId(`${EDIT_RULES_MODAL_PREFIX}${channelId}_${messageId}`)
     .setTitle('Edit Rules Panel');
@@ -602,10 +627,16 @@ async function findTrelloListId() {
   );
 
   const list = response.data.find(
-    item => item.name.toLowerCase() === CONFIG.trelloTargetListName.toLowerCase()
+    item =>
+      item.name.toLowerCase() === CONFIG.trelloTargetListName.toLowerCase()
   );
 
-  if (!list) throw new Error(`Trello list "${CONFIG.trelloTargetListName}" was not found.`);
+  if (!list) {
+    throw new Error(
+      `Trello list "${CONFIG.trelloTargetListName}" was not found.`
+    );
+  }
+
   return list.id;
 }
 
@@ -627,16 +658,20 @@ async function findOrCreateTrelloLabel(labelName, labelColor) {
 
   if (existingLabel) return existingLabel.id;
 
-  const createdLabel = await axios.post('https://api.trello.com/1/labels', null, {
-    params: {
-      key: CONFIG.trelloKey,
-      token: CONFIG.trelloToken,
-      idBoard: CONFIG.trelloBoardShortlink,
-      name: labelName,
-      color: labelColor,
-    },
-    timeout: 15000,
-  });
+  const createdLabel = await axios.post(
+    'https://api.trello.com/1/labels',
+    null,
+    {
+      params: {
+        key: CONFIG.trelloKey,
+        token: CONFIG.trelloToken,
+        idBoard: CONFIG.trelloBoardShortlink,
+        name: labelName,
+        color: labelColor,
+      },
+      timeout: 15000,
+    }
+  );
 
   return createdLabel.data.id;
 }
@@ -684,30 +719,65 @@ async function createSuggestionCard(data) {
 
   if (labelId) params.idLabels = labelId;
 
-  const response = await axios.post('https://api.trello.com/1/cards', null, {
-    params,
-    timeout: 15000,
-  });
+  const response = await axios.post(
+    'https://api.trello.com/1/cards',
+    null,
+    {
+      params,
+      timeout: 15000,
+    }
+  );
 
   return response.data;
 }
 
-async function sendSuggestionLog(interaction, title, category, description, cardUrl, priority = 'NORMAL') {
+async function sendSuggestionLog(
+  interaction,
+  title,
+  category,
+  description,
+  cardUrl,
+  priority = 'NORMAL'
+) {
   if (!CONFIG.logChannelId || !interaction.guild) return;
 
-  const channel = await interaction.guild.channels.fetch(CONFIG.logChannelId).catch(() => null);
+  const channel = await interaction.guild.channels
+    .fetch(CONFIG.logChannelId)
+    .catch(() => null);
+
   if (!channel || !channel.isTextBased()) return;
 
   const embed = new EmbedBuilder()
     .setColor(getPriorityColor(priority))
     .setTitle('New Suggestion')
     .addFields(
-      { name: 'User', value: `${interaction.user.tag} (${interaction.user.id})` },
-      { name: 'Priority', value: priority || 'NORMAL', inline: true },
-      { name: 'Category', value: category || 'None', inline: true },
-      { name: 'Title', value: title, inline: true },
-      { name: 'Description', value: clampText(description, 1024) },
-      { name: 'Trello Card', value: cardUrl || 'Created' }
+      {
+        name: 'User',
+        value: `${interaction.user.tag} (${interaction.user.id})`,
+      },
+      {
+        name: 'Priority',
+        value: priority || 'NORMAL',
+        inline: true,
+      },
+      {
+        name: 'Category',
+        value: category || 'None',
+        inline: true,
+      },
+      {
+        name: 'Title',
+        value: title,
+        inline: true,
+      },
+      {
+        name: 'Description',
+        value: clampText(description, 1024),
+      },
+      {
+        name: 'Trello Card',
+        value: cardUrl || 'Created',
+      }
     )
     .setTimestamp();
 
@@ -724,7 +794,9 @@ function buildVerifyPanel() {
     )
     .setFooter({ text: `${CONFIG.serverName} • Verification` });
 
-  if (safeString(CONFIG.verifyImageUrl)) embed.setImage(CONFIG.verifyImageUrl);
+  if (safeString(CONFIG.verifyImageUrl)) {
+    embed.setImage(CONFIG.verifyImageUrl);
+  }
 
   const button = new ButtonBuilder()
     .setCustomId(VERIFY_BUTTON_ID)
@@ -740,22 +812,32 @@ function buildVerifyPanel() {
 async function sendVerifyLog(member) {
   if (!CONFIG.verifyLogChannelId) return;
 
-  const channel = await member.guild.channels.fetch(CONFIG.verifyLogChannelId).catch(() => null);
+  const channel = await member.guild.channels
+    .fetch(CONFIG.verifyLogChannelId)
+    .catch(() => null);
+
   if (!channel || !channel.isTextBased()) return;
 
   const embed = new EmbedBuilder()
     .setColor(EMBED_COLOR)
     .setTitle('✅ User Verified')
     .addFields(
-      { name: 'User', value: `${member.user.tag} (${member.id})` },
+      {
+        name: 'User',
+        value: `${member.user.tag} (${member.id})`,
+      },
       {
         name: 'Verified Role',
-        value: CONFIG.verifyRoleId ? `<@&${CONFIG.verifyRoleId}>` : 'Not configured',
+        value: CONFIG.verifyRoleId
+          ? `<@&${CONFIG.verifyRoleId}>`
+          : 'Not configured',
         inline: true,
       },
       {
         name: 'Unverified Removed',
-        value: CONFIG.unverifiedRoleId ? `<@&${CONFIG.unverifiedRoleId}>` : 'Not configured',
+        value: CONFIG.unverifiedRoleId
+          ? `<@&${CONFIG.unverifiedRoleId}>`
+          : 'Not configured',
         inline: true,
       }
     )
@@ -782,7 +864,10 @@ function buildWelcomeEmbed(member) {
     .setThumbnail(member.user.displayAvatarURL({ extension: 'png' }))
     .setTimestamp();
 
-  if (safeString(CONFIG.welcomeImageUrl)) embed.setImage(CONFIG.welcomeImageUrl);
+  if (safeString(CONFIG.welcomeImageUrl)) {
+    embed.setImage(CONFIG.welcomeImageUrl);
+  }
+
   return embed;
 }
 
@@ -793,7 +878,9 @@ function buildWelcomeComponents(guildId) {
     new ButtonBuilder()
       .setLabel('📜 Server Rules')
       .setStyle(ButtonStyle.Link)
-      .setURL(`https://discord.com/channels/${guildId}/${CONFIG.serverRulesChannelId}`)
+      .setURL(
+        `https://discord.com/channels/${guildId}/${CONFIG.serverRulesChannelId}`
+      )
   );
 
   return [row];
@@ -812,9 +899,17 @@ function getDonationData() {
 
     return {
       currentAmount: Number(parsed.currentAmount || 0),
-      goalAmount: Number(parsed.goalAmount || CONFIG.donationGoalAmount),
-      currencySymbol: safeString(parsed.currencySymbol, CONFIG.donationCurrencySymbol),
-      forumChannelId: safeString(parsed.forumChannelId, CONFIG.donationForumChannelId),
+      goalAmount: Number(
+        parsed.goalAmount || CONFIG.donationGoalAmount
+      ),
+      currencySymbol: safeString(
+        parsed.currencySymbol,
+        CONFIG.donationCurrencySymbol
+      ),
+      forumChannelId: safeString(
+        parsed.forumChannelId,
+        CONFIG.donationForumChannelId
+      ),
       threadId: safeString(parsed.threadId, ''),
       messageId: safeString(parsed.messageId, ''),
       lastDonation: parsed.lastDonation || null,
@@ -841,7 +936,10 @@ function saveDonationData(data) {
 
 function buildDonationProgressBar(current, goal, size = 18) {
   const safeGoal = Math.max(Number(goal || 0), 1);
-  const percent = Math.min(Math.max(Number(current || 0) / safeGoal, 0), 1);
+  const percent = Math.min(
+    Math.max(Number(current || 0) / safeGoal, 0),
+    1
+  );
   const filled = Math.round(size * percent);
 
   return '▰'.repeat(filled) + '▱'.repeat(size - filled);
@@ -849,8 +947,14 @@ function buildDonationProgressBar(current, goal, size = 18) {
 
 function buildDonationEmbed(data) {
   const current = Number(data.currentAmount || 0);
-  const goal = Math.max(Number(data.goalAmount || CONFIG.donationGoalAmount), 1);
-  const currency = safeString(data.currencySymbol, CONFIG.donationCurrencySymbol);
+  const goal = Math.max(
+    Number(data.goalAmount || CONFIG.donationGoalAmount),
+    1
+  );
+  const currency = safeString(
+    data.currencySymbol,
+    CONFIG.donationCurrencySymbol
+  );
   const percentNumber = Math.min((current / goal) * 100, 100);
   const remaining = Math.max(goal - current, 0);
 
@@ -888,37 +992,130 @@ function buildDonationEmbed(data) {
   return embed;
 }
 
+function pickNewestDonationThread(threads) {
+  if (!threads) return null;
+
+  return (
+    [...threads.values()]
+      .filter(
+        thread => thread && thread.name === DONATION_THREAD_NAME
+      )
+      .sort(
+        (a, b) =>
+          Number(b.createdTimestamp || 0) -
+          Number(a.createdTimestamp || 0)
+      )[0] || null
+  );
+}
+
+async function findExistingDonationThread(
+  guild,
+  forum,
+  storedThreadId = ''
+) {
+  if (storedThreadId) {
+    const storedThread = await guild.channels
+      .fetch(storedThreadId)
+      .catch(() => null);
+
+    if (
+      storedThread &&
+      typeof storedThread.isThread === 'function' &&
+      storedThread.isThread() &&
+      storedThread.parentId === forum.id
+    ) {
+      return storedThread;
+    }
+  }
+
+  const activeResult = await forum.threads.fetchActive().catch(error => {
+    console.error('Failed to search active donation threads:', error);
+    return null;
+  });
+
+  const activeThread = pickNewestDonationThread(activeResult?.threads);
+  if (activeThread) return activeThread;
+
+  const archivedResult = await forum.threads
+    .fetchArchived({ limit: 100 })
+    .catch(error => {
+      console.error('Failed to search archived donation threads:', error);
+      return null;
+    });
+
+  return pickNewestDonationThread(archivedResult?.threads);
+}
+
+async function getDonationStarterMessage(thread, storedMessageId = '') {
+  if (storedMessageId) {
+    const storedMessage = await thread.messages
+      .fetch(storedMessageId)
+      .catch(() => null);
+
+    if (storedMessage) return storedMessage;
+  }
+
+  return thread.fetchStarterMessage().catch(() => null);
+}
+
 async function ensureDonationPost(interaction, data) {
-  const forumChannelId = safeString(data.forumChannelId, CONFIG.donationForumChannelId);
+  const forumChannelId = safeString(
+    data.forumChannelId,
+    CONFIG.donationForumChannelId
+  );
 
   if (!forumChannelId) {
     throw new Error('DONATION_FORUM_CHANNEL_ID is not configured.');
   }
 
-  const forum = await interaction.guild.channels.fetch(forumChannelId).catch(() => null);
+  const forum = await interaction.guild.channels
+    .fetch(forumChannelId)
+    .catch(() => null);
 
   if (!forum || forum.type !== ChannelType.GuildForum) {
     throw new Error('The configured donation channel is not a forum channel.');
   }
 
-  if (data.threadId && data.messageId) {
-    const existingThread = await interaction.guild.channels.fetch(data.threadId).catch(() => null);
+  let thread = await findExistingDonationThread(
+    interaction.guild,
+    forum,
+    data.threadId
+  );
 
-    if (existingThread) {
-      const existingMessage = await existingThread.messages.fetch(data.messageId).catch(() => null);
-
-      if (existingMessage) {
-        await existingMessage.edit({
-          embeds: [buildDonationEmbed(data)],
+  if (thread) {
+    if (thread.archived) {
+      await thread
+        .setArchived(false, 'Updating the donation progress message')
+        .catch(error => {
+          console.error('Failed to unarchive the donation thread:', error);
         });
-
-        return data;
-      }
     }
+
+    const existingMessage = await getDonationStarterMessage(
+      thread,
+      data.messageId
+    );
+
+    if (!existingMessage) {
+      throw new Error(
+        'The existing donation forum post was found, but its starter message could not be loaded.'
+      );
+    }
+
+    await existingMessage.edit({
+      embeds: [buildDonationEmbed(data)],
+    });
+
+    data.forumChannelId = forum.id;
+    data.threadId = thread.id;
+    data.messageId = existingMessage.id;
+    saveDonationData(data);
+
+    return data;
   }
 
-  const thread = await forum.threads.create({
-    name: '💎 Donation Progress',
+  thread = await forum.threads.create({
+    name: DONATION_THREAD_NAME,
     message: {
       embeds: [buildDonationEmbed(data)],
     },
@@ -926,198 +1123,26 @@ async function ensureDonationPost(interaction, data) {
 
   const starterMessage = await thread.fetchStarterMessage();
 
+  data.forumChannelId = forum.id;
   data.threadId = thread.id;
   data.messageId = starterMessage.id;
-
   saveDonationData(data);
 
   return data;
 }
 
 async function updateDonationPost(interaction, data) {
-  const updatedData = await ensureDonationPost(interaction, data);
-
-  const thread = await interaction.guild.channels.fetch(updatedData.threadId).catch(() => null);
-  if (!thread) throw new Error('Donation thread was not found.');
-
-  const message = await thread.messages.fetch(updatedData.messageId).catch(() => null);
-  if (!message) throw new Error('Donation message was not found.');
-
-  await message.edit({
-    embeds: [buildDonationEmbed(updatedData)],
-  });
-
-  return updatedData;
+  return ensureDonationPost(interaction, data);
 }
-
-
-/* =========================
-   RAILWAY HEALTH & DISCORD CONNECTION MONITORING
-========================= */
-
-function errorMessage(error) {
-  if (!error) return 'Unknown error';
-  if (error instanceof Error) return error.stack || error.message;
-  return String(error);
-}
-
-function healthPayload() {
-  return {
-    service: CONFIG.serverName,
-    processOnline: true,
-    discordReady: client.isReady(),
-    discordUser: client.user?.tag || null,
-    guildCount: client.guilds?.cache?.size || 0,
-    websocketStatus: client.ws?.status ?? null,
-    uptimeSeconds: Math.floor(process.uptime()),
-    startedAt: BOT_STATE.startedAt,
-    lastReadyAt: BOT_STATE.lastReadyAt,
-    lastDisconnectAt: BOT_STATE.lastDisconnectAt,
-    lastError: BOT_STATE.lastError,
-  };
-}
-
-function startHealthServer() {
-  const server = http.createServer((req, res) => {
-    const isHealthRequest = req.url === '/health';
-    const isRootRequest = req.url === '/';
-
-    if (!isHealthRequest && !isRootRequest) {
-      res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ error: 'Not found' }));
-      return;
-    }
-
-    const payload = healthPayload();
-    const statusCode = isHealthRequest && !payload.discordReady ? 503 : 200;
-
-    res.writeHead(statusCode, {
-      'Content-Type': 'application/json; charset=utf-8',
-      'Cache-Control': 'no-store',
-    });
-    res.end(JSON.stringify(payload, null, 2));
-  });
-
-  server.on('error', error => {
-    BOT_STATE.lastError = `Health server: ${error.message}`;
-    console.error('Health server error:', error);
-    process.exit(1);
-  });
-
-  server.listen(CONFIG.port, '0.0.0.0', () => {
-    console.log(`Health server listening on 0.0.0.0:${CONFIG.port}`);
-  });
-}
-
-function startDiscordWatchdog() {
-  const startupTimer = setTimeout(() => {
-    if (!client.isReady()) {
-      console.error(
-        `Discord did not become ready within ${CONFIG.discordReadyTimeoutMs}ms. ` +
-        'Check DISCORD_TOKEN and enable Server Members Intent in the Discord Developer Portal.'
-      );
-      process.exit(1);
-    }
-  }, CONFIG.discordReadyTimeoutMs);
-  startupTimer.unref();
-
-  const watchdog = setInterval(() => {
-    if (client.isReady()) {
-      discordOfflineSince = null;
-      return;
-    }
-
-    if (!discordOfflineSince) discordOfflineSince = Date.now();
-    const offlineFor = Date.now() - discordOfflineSince;
-
-    console.warn(`Discord is not ready. Offline for ${Math.floor(offlineFor / 1000)} seconds.`);
-
-    if (offlineFor >= CONFIG.discordOfflineRestartMs) {
-      console.error(
-        `Discord stayed offline for ${CONFIG.discordOfflineRestartMs}ms. ` +
-        'Exiting so Railway can restart the service.'
-      );
-      process.exit(1);
-    }
-  }, 60000);
-  watchdog.unref();
-}
-
-client.on('error', error => {
-  BOT_STATE.lastError = errorMessage(error);
-  console.error('Discord client error:', error);
-});
-
-client.on('warn', warning => {
-  console.warn('Discord client warning:', warning);
-});
-
-client.on('shardError', (error, shardId) => {
-  BOT_STATE.lastError = `Shard ${shardId}: ${errorMessage(error)}`;
-  console.error(`Discord shard ${shardId} error:`, error);
-});
-
-client.on('shardDisconnect', (event, shardId) => {
-  BOT_STATE.discordReady = false;
-  BOT_STATE.lastDisconnectAt = new Date().toISOString();
-  BOT_STATE.lastError = `Shard ${shardId} disconnected with code ${event.code}: ${event.reason || 'No reason'}`;
-  if (!discordOfflineSince) discordOfflineSince = Date.now();
-
-  console.error(
-    `Discord shard ${shardId} disconnected. Code: ${event.code}. Reason: ${event.reason || 'No reason'}`
-  );
-
-  if (event.code === 4014) {
-    console.error(
-      'Discord rejected a privileged intent. Enable Server Members Intent under ' +
-      'Discord Developer Portal -> Bot -> Privileged Gateway Intents.'
-    );
-    setTimeout(() => process.exit(1), 1000).unref();
-  }
-});
-
-client.on('shardReconnecting', shardId => {
-  console.warn(`Discord shard ${shardId} is reconnecting...`);
-});
-
-client.on('shardResume', (shardId, replayedEvents) => {
-  BOT_STATE.discordReady = true;
-  BOT_STATE.lastReadyAt = new Date().toISOString();
-  BOT_STATE.lastError = null;
-  discordOfflineSince = null;
-  console.log(`Discord shard ${shardId} resumed. Replayed events: ${replayedEvents}`);
-});
-
-client.on('invalidated', () => {
-  BOT_STATE.discordReady = false;
-  BOT_STATE.lastError = 'Discord session invalidated.';
-  console.error('Discord session was invalidated. Exiting for a clean Railway restart.');
-  process.exit(1);
-});
-
-process.on('unhandledRejection', reason => {
-  BOT_STATE.lastError = `Unhandled rejection: ${errorMessage(reason)}`;
-  console.error('Unhandled promise rejection:', reason);
-});
-
-process.on('uncaughtException', error => {
-  BOT_STATE.lastError = `Uncaught exception: ${errorMessage(error)}`;
-  console.error('Uncaught exception:', error);
-  process.exit(1);
-});
 
 /* =========================
    BOT EVENTS
 ========================= */
 
 client.once(Events.ClientReady, async () => {
-  BOT_STATE.discordReady = true;
-  BOT_STATE.lastReadyAt = new Date().toISOString();
-  BOT_STATE.lastError = null;
-  discordOfflineSince = null;
-
   ensureDataFiles();
   console.log(`Logged in as ${client.user.tag}`);
+  console.log(`Data directory: ${DATA_DIR}`);
 
   try {
     await deployCommands();
@@ -1126,7 +1151,9 @@ client.once(Events.ClientReady, async () => {
   }
 
   try {
-    client.user.setActivity(CONFIG.serverName, { type: ActivityType.Watching });
+    client.user.setActivity(CONFIG.serverName, {
+      type: ActivityType.Watching,
+    });
   } catch (error) {
     console.error('Failed to set bot activity:', error);
   }
@@ -1148,7 +1175,10 @@ client.on(Events.GuildMemberAdd, async member => {
 client.on(Events.InteractionCreate, async interaction => {
   try {
     if (interaction.isChatInputCommand()) {
-      if (interaction.commandName === 'rules' || interaction.commandName === 'serverrules') {
+      if (
+        interaction.commandName === 'rules' ||
+        interaction.commandName === 'serverrules'
+      ) {
         await interaction.reply({
           embeds: buildDefaultRulesEmbeds(),
         });
@@ -1176,7 +1206,9 @@ client.on(Events.InteractionCreate, async interaction => {
         const updatedPanels = [];
 
         for (const panel of panels) {
-          const channel = await interaction.guild.channels.fetch(panel.channelId).catch(() => null);
+          const channel = await interaction.guild.channels
+            .fetch(panel.channelId)
+            .catch(() => null);
 
           if (!channel || !channel.isTextBased()) {
             failedCount++;
@@ -1185,7 +1217,9 @@ client.on(Events.InteractionCreate, async interaction => {
           }
 
           const me = interaction.guild?.members?.me;
-          const missing = me ? getMissingChannelPermissions(channel, me) : ['Unknown'];
+          const missing = me
+            ? getMissingChannelPermissions(channel, me)
+            : ['Unknown'];
 
           if (missing.length) {
             failedCount++;
@@ -1193,8 +1227,15 @@ client.on(Events.InteractionCreate, async interaction => {
             continue;
           }
 
-          const embeds = buildRulesEmbeds(panel.title, panel.text, panel.color);
-          const sentMessage = await channel.send({ embeds }).catch(() => null);
+          const embeds = buildRulesEmbeds(
+            panel.title,
+            panel.text,
+            panel.color
+          );
+
+          const sentMessage = await channel
+            .send({ embeds })
+            .catch(() => null);
 
           if (!sentMessage) {
             failedCount++;
@@ -1215,10 +1256,11 @@ client.on(Events.InteractionCreate, async interaction => {
         saveRulesPanels(updatedPanels);
 
         await interaction.followUp({
-          content: `✅ Done.
-Sent: **${sentCount}**
-Failed: **${failedCount}**
-💾 Saved panels remain stored permanently in data/rules-panels.json.`,
+          content:
+            `✅ Done.\n` +
+            `Sent: **${sentCount}**\n` +
+            `Failed: **${failedCount}**\n` +
+            `💾 Saved panels remain stored permanently in ${RULES_PANELS_FILE}.`,
           flags: MessageFlags.Ephemeral,
         });
 
@@ -1237,11 +1279,14 @@ Failed: **${failedCount}**
           return;
         }
 
-        const message = await channel.messages.fetch(messageId).catch(() => null);
+        const message = await channel.messages
+          .fetch(messageId)
+          .catch(() => null);
 
         if (!message) {
           await interaction.reply({
-            content: '❌ I could not find a message with that ID in the selected channel.',
+            content:
+              '❌ I could not find a message with that ID in the selected channel.',
             flags: MessageFlags.Ephemeral,
           });
           return;
@@ -1249,7 +1294,8 @@ Failed: **${failedCount}**
 
         if (message.author.id !== client.user.id) {
           await interaction.reply({
-            content: '❌ I can only save rules panels that were sent by this bot.',
+            content:
+              '❌ I can only save rules panels that were sent by this bot.',
             flags: MessageFlags.Ephemeral,
           });
           return;
@@ -1269,7 +1315,7 @@ Failed: **${failedCount}**
         const text = message.embeds
           .map(embed => embed.description || '')
           .filter(Boolean)
-          .join('\\n');
+          .join('\n');
 
         const success = upsertRulesPanel({
           channelId: channel.id,
@@ -1289,19 +1335,25 @@ Failed: **${failedCount}**
         }
 
         await interaction.reply({
-          content: `✅ Rules panel saved permanently.
-Title: ${title}
-Color: ${color}`,
+          content:
+            `✅ Rules panel saved permanently.\n` +
+            `Title: ${title}\n` +
+            `Color: ${color}`,
           flags: MessageFlags.Ephemeral,
         });
 
         return;
       }
 
-      if (interaction.commandName === 'setrules' || interaction.commandName === 'setserverrules') {
-        const title = interaction.options.getString('title') || 'Server Rules';
+      if (
+        interaction.commandName === 'setrules' ||
+        interaction.commandName === 'setserverrules'
+      ) {
+        const title =
+          interaction.options.getString('title') || 'Server Rules';
         const text = interaction.options.getString('text');
-        const color = interaction.options.getString('color') || DEFAULT_RULES_COLOR;
+        const color =
+          interaction.options.getString('color') || DEFAULT_RULES_COLOR;
 
         const success = saveRulesData({ title, text, color });
 
@@ -1314,7 +1366,9 @@ Color: ${color}`,
         }
 
         await interaction.reply({
-          content: `✅ Default rules updated successfully.\nColor: ${normalizeHexColor(color)}`,
+          content:
+            `✅ Default rules updated successfully.\n` +
+            `Color: ${normalizeHexColor(color)}`,
           flags: MessageFlags.Ephemeral,
         });
         return;
@@ -1332,11 +1386,15 @@ Color: ${color}`,
         }
 
         const me = interaction.guild?.members?.me;
-        const missing = me ? getMissingChannelPermissions(channel, me) : ['Unknown'];
+        const missing = me
+          ? getMissingChannelPermissions(channel, me)
+          : ['Unknown'];
 
         if (missing.length) {
           await interaction.reply({
-            content: `I cannot send the rules panel to ${channel}.\nMissing permissions: ${missing.join(', ')}`,
+            content:
+              `I cannot send the rules panel to ${channel}.\n` +
+              `Missing permissions: ${missing.join(', ')}`,
             flags: MessageFlags.Ephemeral,
           });
           return;
@@ -1358,11 +1416,14 @@ Color: ${color}`,
           return;
         }
 
-        const message = await channel.messages.fetch(messageId).catch(() => null);
+        const message = await channel.messages
+          .fetch(messageId)
+          .catch(() => null);
 
         if (!message) {
           await interaction.reply({
-            content: 'I could not find a message with that ID in the selected channel.',
+            content:
+              'I could not find a message with that ID in the selected channel.',
             flags: MessageFlags.Ephemeral,
           });
           return;
@@ -1370,7 +1431,8 @@ Color: ${color}`,
 
         if (message.author.id !== client.user.id) {
           await interaction.reply({
-            content: 'I can only edit rules panels that were sent by this bot.',
+            content:
+              'I can only edit rules panels that were sent by this bot.',
             flags: MessageFlags.Ephemeral,
           });
           return;
@@ -1394,12 +1456,21 @@ Color: ${color}`,
           .join('\n');
 
         await interaction.showModal(
-          buildEditRulesModal(channel.id, message.id, existingTitle, existingText, existingColor)
+          buildEditRulesModal(
+            channel.id,
+            message.id,
+            existingTitle,
+            existingText,
+            existingColor
+          )
         );
         return;
       }
 
-      if (interaction.commandName === 'ticketpanel') {
+      if (
+        interaction.commandName === 'ticketpanel' ||
+        interaction.commandName === 'suggestionpanel'
+      ) {
         const channel = interaction.options.getChannel('channel');
 
         if (!channel || !channel.isTextBased()) {
@@ -1411,11 +1482,15 @@ Color: ${color}`,
         }
 
         const me = interaction.guild?.members?.me;
-        const missing = me ? getMissingChannelPermissions(channel, me) : ['Unknown'];
+        const missing = me
+          ? getMissingChannelPermissions(channel, me)
+          : ['Unknown'];
 
         if (missing.length) {
           await interaction.reply({
-            content: `I cannot send the suggestion panel to ${channel}.\nMissing permissions: ${missing.join(', ')}`,
+            content:
+              `I cannot send the suggestion panel to ${channel}.\n` +
+              `Missing permissions: ${missing.join(', ')}`,
             flags: MessageFlags.Ephemeral,
           });
           return;
@@ -1442,11 +1517,15 @@ Color: ${color}`,
         }
 
         const me = interaction.guild?.members?.me;
-        const missing = me ? getMissingChannelPermissions(channel, me) : ['Unknown'];
+        const missing = me
+          ? getMissingChannelPermissions(channel, me)
+          : ['Unknown'];
 
         if (missing.length) {
           await interaction.reply({
-            content: `I cannot send the verify panel to ${channel}.\nMissing permissions: ${missing.join(', ')}`,
+            content:
+              `I cannot send the verify panel to ${channel}.\n` +
+              `Missing permissions: ${missing.join(', ')}`,
             flags: MessageFlags.Ephemeral,
           });
           return;
@@ -1473,11 +1552,15 @@ Color: ${color}`,
         }
 
         const me = interaction.guild?.members?.me;
-        const missing = me ? getMissingChannelPermissions(channel, me) : ['Unknown'];
+        const missing = me
+          ? getMissingChannelPermissions(channel, me)
+          : ['Unknown'];
 
         if (missing.length) {
           await interaction.reply({
-            content: `I cannot send embeds to ${channel}.\nMissing permissions: ${missing.join(', ')}`,
+            content:
+              `I cannot send embeds to ${channel}.\n` +
+              `Missing permissions: ${missing.join(', ')}`,
             flags: MessageFlags.Ephemeral,
           });
           return;
@@ -1511,18 +1594,20 @@ Color: ${color}`,
             }
 
             await ensureDonationPost(interaction, data);
-            saveDonationData(data);
 
             await interaction.editReply({
-              content: '✅ Donation progress post has been created or updated.',
+              content:
+                '✅ Donation progress post has been created or updated.',
             });
             return;
           }
 
           if (subcommand === 'add') {
             const amount = interaction.options.getNumber('amount');
-            const donor = interaction.options.getString('donor') || 'Anonymous';
-            const note = interaction.options.getString('note') || 'No note';
+            const donor =
+              interaction.options.getString('donor') || 'Anonymous';
+            const note =
+              interaction.options.getString('note') || 'No note';
 
             if (!amount || amount <= 0) {
               await interaction.editReply({
@@ -1540,11 +1625,12 @@ Color: ${color}`,
               addedAt: new Date().toISOString(),
             };
 
-            saveDonationData(data);
             await updateDonationPost(interaction, data);
 
             await interaction.editReply({
-              content: `✅ Added **${amount.toFixed(2)}${data.currencySymbol}** to the donation progress.`,
+              content:
+                `✅ Added **${amount.toFixed(2)}${data.currencySymbol}** ` +
+                'to the donation progress.',
             });
             return;
           }
@@ -1560,11 +1646,12 @@ Color: ${color}`,
             }
 
             data.currentAmount = amount;
-            saveDonationData(data);
             await updateDonationPost(interaction, data);
 
             await interaction.editReply({
-              content: `✅ Donation progress set to **${amount.toFixed(2)}${data.currencySymbol}**.`,
+              content:
+                `✅ Donation progress set to **${amount.toFixed(2)}` +
+                `${data.currencySymbol}**.`,
             });
             return;
           }
@@ -1580,11 +1667,12 @@ Color: ${color}`,
             }
 
             data.goalAmount = amount;
-            saveDonationData(data);
             await updateDonationPost(interaction, data);
 
             await interaction.editReply({
-              content: `✅ Donation goal set to **${amount.toFixed(2)}${data.currencySymbol}**.`,
+              content:
+                `✅ Donation goal set to **${amount.toFixed(2)}` +
+                `${data.currencySymbol}**.`,
             });
             return;
           }
@@ -1592,7 +1680,6 @@ Color: ${color}`,
           if (subcommand === 'reset') {
             data.currentAmount = 0;
             data.lastDonation = null;
-            saveDonationData(data);
             await updateDonationPost(interaction, data);
 
             await interaction.editReply({
@@ -1625,12 +1712,18 @@ Color: ${color}`,
       }
     }
 
-    if (interaction.isButton() && interaction.customId === PANEL_BUTTON_ID) {
+    if (
+      interaction.isButton() &&
+      interaction.customId === PANEL_BUTTON_ID
+    ) {
       await interaction.showModal(buildSuggestionModal());
       return;
     }
 
-    if (interaction.isButton() && interaction.customId === VERIFY_BUTTON_ID) {
+    if (
+      interaction.isButton() &&
+      interaction.customId === VERIFY_BUTTON_ID
+    ) {
       if (!interaction.guild) {
         await interaction.reply({
           content: '❌ This button can only be used in a server.',
@@ -1647,7 +1740,10 @@ Color: ${color}`,
         return;
       }
 
-      const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+      const member = await interaction.guild.members
+        .fetch(interaction.user.id)
+        .catch(() => null);
+
       if (!member) {
         await interaction.reply({
           content: '❌ Member not found.',
@@ -1656,7 +1752,10 @@ Color: ${color}`,
         return;
       }
 
-      const verifyRole = interaction.guild.roles.cache.get(CONFIG.verifyRoleId);
+      const verifyRole = interaction.guild.roles.cache.get(
+        CONFIG.verifyRoleId
+      );
+
       if (!verifyRole) {
         await interaction.reply({
           content: '❌ Verified role not found.',
@@ -1675,8 +1774,13 @@ Color: ${color}`,
 
       await member.roles.add(CONFIG.verifyRoleId).catch(() => null);
 
-      if (CONFIG.unverifiedRoleId && member.roles.cache.has(CONFIG.unverifiedRoleId)) {
-        await member.roles.remove(CONFIG.unverifiedRoleId).catch(() => null);
+      if (
+        CONFIG.unverifiedRoleId &&
+        member.roles.cache.has(CONFIG.unverifiedRoleId)
+      ) {
+        await member.roles
+          .remove(CONFIG.unverifiedRoleId)
+          .catch(() => null);
       }
 
       await sendVerifyLog(member);
@@ -1693,8 +1797,14 @@ Color: ${color}`,
       interaction.type === InteractionType.ModalSubmit &&
       interaction.customId.startsWith(CUSTOM_EMBED_MODAL_PREFIX)
     ) {
-      const channelId = interaction.customId.replace(CUSTOM_EMBED_MODAL_PREFIX, '');
-      const channel = await interaction.guild.channels.fetch(channelId).catch(() => null);
+      const channelId = interaction.customId.replace(
+        CUSTOM_EMBED_MODAL_PREFIX,
+        ''
+      );
+
+      const channel = await interaction.guild.channels
+        .fetch(channelId)
+        .catch(() => null);
 
       if (!channel || !channel.isTextBased()) {
         await interaction.reply({
@@ -1704,11 +1814,26 @@ Color: ${color}`,
         return;
       }
 
-      const title = safeString(interaction.fields.getTextInputValue('title'), 'Announcement');
-      const color = safeString(interaction.fields.getTextInputValue('color'), DEFAULT_RULES_COLOR);
-      const text = safeString(interaction.fields.getTextInputValue('text'), 'No text provided.');
-      const image = safeString(interaction.fields.getTextInputValue('image'), '');
-      const footer = safeString(interaction.fields.getTextInputValue('footer'), CONFIG.serverName);
+      const title = safeString(
+        interaction.fields.getTextInputValue('title'),
+        'Announcement'
+      );
+      const color = safeString(
+        interaction.fields.getTextInputValue('color'),
+        DEFAULT_RULES_COLOR
+      );
+      const text = safeString(
+        interaction.fields.getTextInputValue('text'),
+        'No text provided.'
+      );
+      const image = safeString(
+        interaction.fields.getTextInputValue('image'),
+        ''
+      );
+      const footer = safeString(
+        interaction.fields.getTextInputValue('footer'),
+        CONFIG.serverName
+      );
 
       const embed = new EmbedBuilder()
         .setColor(parseHexColor(color))
@@ -1717,7 +1842,10 @@ Color: ${color}`,
         .setFooter({ text: footer })
         .setTimestamp();
 
-      if (image.startsWith('http://') || image.startsWith('https://')) {
+      if (
+        image.startsWith('http://') ||
+        image.startsWith('https://')
+      ) {
         embed.setImage(image);
       }
 
@@ -1735,8 +1863,14 @@ Color: ${color}`,
       interaction.type === InteractionType.ModalSubmit &&
       interaction.customId.startsWith(RULES_MODAL_PREFIX)
     ) {
-      const channelId = interaction.customId.replace(RULES_MODAL_PREFIX, '');
-      const channel = await interaction.guild.channels.fetch(channelId).catch(() => null);
+      const channelId = interaction.customId.replace(
+        RULES_MODAL_PREFIX,
+        ''
+      );
+
+      const channel = await interaction.guild.channels
+        .fetch(channelId)
+        .catch(() => null);
 
       if (!channel || !channel.isTextBased()) {
         await interaction.reply({
@@ -1747,22 +1881,34 @@ Color: ${color}`,
       }
 
       const me = interaction.guild?.members?.me;
-      const missing = me ? getMissingChannelPermissions(channel, me) : ['Unknown'];
+      const missing = me
+        ? getMissingChannelPermissions(channel, me)
+        : ['Unknown'];
 
       if (missing.length) {
         await interaction.reply({
-          content: `I cannot send the rules panel to ${channel}.\nMissing permissions: ${missing.join(', ')}`,
+          content:
+            `I cannot send the rules panel to ${channel}.\n` +
+            `Missing permissions: ${missing.join(', ')}`,
           flags: MessageFlags.Ephemeral,
         });
         return;
       }
 
-      const title = safeString(interaction.fields.getTextInputValue('title'), 'Rules Panel');
-      const text = safeString(interaction.fields.getTextInputValue('text'), 'No rules text provided.');
-      const color = safeString(interaction.fields.getTextInputValue('color'), DEFAULT_RULES_COLOR);
+      const title = safeString(
+        interaction.fields.getTextInputValue('title'),
+        'Rules Panel'
+      );
+      const text = safeString(
+        interaction.fields.getTextInputValue('text'),
+        'No rules text provided.'
+      );
+      const color = safeString(
+        interaction.fields.getTextInputValue('color'),
+        DEFAULT_RULES_COLOR
+      );
 
       const embeds = buildRulesEmbeds(title, text, color);
-
       const sentMessage = await channel.send({ embeds });
 
       upsertRulesPanel({
@@ -1788,11 +1934,15 @@ Color: ${color}`,
       interaction.type === InteractionType.ModalSubmit &&
       interaction.customId.startsWith(EDIT_RULES_MODAL_PREFIX)
     ) {
-      const parts = interaction.customId.replace(EDIT_RULES_MODAL_PREFIX, '').split('_');
+      const parts = interaction.customId
+        .replace(EDIT_RULES_MODAL_PREFIX, '')
+        .split('_');
       const channelId = parts[0];
       const messageId = parts[1];
 
-      const channel = await interaction.guild.channels.fetch(channelId).catch(() => null);
+      const channel = await interaction.guild.channels
+        .fetch(channelId)
+        .catch(() => null);
 
       if (!channel || !channel.isTextBased()) {
         await interaction.reply({
@@ -1802,7 +1952,9 @@ Color: ${color}`,
         return;
       }
 
-      const message = await channel.messages.fetch(messageId).catch(() => null);
+      const message = await channel.messages
+        .fetch(messageId)
+        .catch(() => null);
 
       if (!message) {
         await interaction.reply({
@@ -1814,18 +1966,27 @@ Color: ${color}`,
 
       if (message.author.id !== client.user.id) {
         await interaction.reply({
-          content: 'I can only edit rules panels that were sent by this bot.',
+          content:
+            'I can only edit rules panels that were sent by this bot.',
           flags: MessageFlags.Ephemeral,
         });
         return;
       }
 
-      const title = safeString(interaction.fields.getTextInputValue('title'), 'Rules Panel');
-      const text = safeString(interaction.fields.getTextInputValue('text'), 'No rules text provided.');
-      const color = safeString(interaction.fields.getTextInputValue('color'), DEFAULT_RULES_COLOR);
+      const title = safeString(
+        interaction.fields.getTextInputValue('title'),
+        'Rules Panel'
+      );
+      const text = safeString(
+        interaction.fields.getTextInputValue('text'),
+        'No rules text provided.'
+      );
+      const color = safeString(
+        interaction.fields.getTextInputValue('color'),
+        DEFAULT_RULES_COLOR
+      );
 
       const embeds = buildRulesEmbeds(title, text, color);
-
       await message.edit({ embeds });
 
       upsertRulesPanel({
@@ -1856,16 +2017,30 @@ Color: ${color}`,
         flags: MessageFlags.Ephemeral,
       });
 
-      if (!CONFIG.trelloKey || !CONFIG.trelloToken || !CONFIG.trelloBoardShortlink) {
+      if (
+        !CONFIG.trelloKey ||
+        !CONFIG.trelloToken ||
+        !CONFIG.trelloBoardShortlink
+      ) {
         await interaction.editReply({
-          content: 'The suggestion system is not configured yet. Please contact an administrator.',
+          content:
+            'The suggestion system is not configured yet. Please contact an administrator.',
         });
         return;
       }
 
-      const title = safeString(interaction.fields.getTextInputValue('title'), 'No title');
-      const category = safeString(interaction.fields.getTextInputValue('category'), 'None');
-      const description = safeString(interaction.fields.getTextInputValue('description'), 'No description');
+      const title = safeString(
+        interaction.fields.getTextInputValue('title'),
+        'No title'
+      );
+      const category = safeString(
+        interaction.fields.getTextInputValue('category'),
+        'None'
+      );
+      const description = safeString(
+        interaction.fields.getTextInputValue('description'),
+        'No description'
+      );
 
       const priority = getSuggestionPriority(interaction.member);
 
@@ -1881,7 +2056,14 @@ Color: ${color}`,
         });
 
         try {
-          await sendSuggestionLog(interaction, title, category, description, card.shortUrl, priority);
+          await sendSuggestionLog(
+            interaction,
+            title,
+            category,
+            description,
+            card.shortUrl,
+            priority
+          );
         } catch (logError) {
           console.error('Suggestion log error:', logError);
         }
@@ -1892,7 +2074,8 @@ Color: ${color}`,
       } catch (error) {
         console.error('Suggestion submit error:', error);
         await interaction.editReply({
-          content: '❌ Failed to submit the suggestion. Please try again later.',
+          content:
+            '❌ Failed to submit the suggestion. Please try again later.',
         });
       }
 
@@ -1900,7 +2083,10 @@ Color: ${color}`,
     }
   } catch (error) {
     console.error('Interaction error:', error);
-    await replyWithError(interaction, 'Something went wrong. Please try again.');
+    await replyWithError(
+      interaction,
+      'Something went wrong. Please try again.'
+    );
   }
 });
 
@@ -1912,7 +2098,10 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
     const hasRoleNow = newMember.roles.cache.has(CONFIG.verifiedRoleId);
 
     if (!hadRole && hasRoleNow) {
-      const channel = await newMember.guild.channels.fetch(CONFIG.welcomeChannelId).catch(() => null);
+      const channel = await newMember.guild.channels
+        .fetch(CONFIG.welcomeChannelId)
+        .catch(() => null);
+
       if (!channel || !channel.isTextBased()) return;
 
       await channel.send({
@@ -1925,27 +2114,20 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
   }
 });
 
+process.on('unhandledRejection', error => {
+  console.error('Unhandled promise rejection:', error);
+});
+
+process.on('uncaughtException', error => {
+  console.error('Uncaught exception:', error);
+});
+
 if (!CONFIG.token) {
   console.error('Missing DISCORD_TOKEN in environment variables.');
   process.exit(1);
 }
 
-async function startBot() {
-  startHealthServer();
-  startDiscordWatchdog();
-
-  console.log('Starting Discord login...');
-  console.log('Required privileged intent: Server Members Intent must be enabled.');
-
-  try {
-    await client.login(CONFIG.token);
-  } catch (error) {
-    BOT_STATE.discordReady = false;
-    BOT_STATE.lastError = `Discord login failed: ${errorMessage(error)}`;
-    console.error('Discord login failed:', error);
-    console.error('Check that DISCORD_TOKEN is current and has no spaces or quotation marks.');
-    process.exit(1);
-  }
-}
-
-startBot();
+client.login(CONFIG.token).catch(error => {
+  console.error('Discord login failed:', error);
+  process.exit(1);
+});
