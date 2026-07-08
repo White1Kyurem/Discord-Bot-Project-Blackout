@@ -22,6 +22,7 @@ const {
 } = require('discord.js');
 
 const { deployCommands } = require('./deploy-commands');
+const { createServerInfoService } = require('./server-info');
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
@@ -78,6 +79,12 @@ const RULES_FILE = path.join(DATA_DIR, 'rules.json');
 const RULES_PANELS_FILE = path.join(DATA_DIR, 'rules-panels.json');
 const DONATION_FILE = path.join(DATA_DIR, 'donation-progress.json');
 
+const serverInfo = createServerInfoService({
+  client,
+  dataDir: DATA_DIR,
+  embedColor: EMBED_COLOR,
+});
+
 const PANEL_BUTTON_ID = 'open_suggestion_modal';
 const VERIFY_BUTTON_ID = 'verify_user_button';
 const SUGGESTION_MODAL_ID = 'suggestion_modal';
@@ -113,6 +120,8 @@ function ensureDataFiles() {
   if (!fs.existsSync(RULES_PANELS_FILE)) {
     fs.writeFileSync(RULES_PANELS_FILE, JSON.stringify([], null, 2), 'utf8');
   }
+
+  serverInfo.ensureFile();
 
   if (!fs.existsSync(DONATION_FILE)) {
     fs.writeFileSync(
@@ -1157,6 +1166,8 @@ client.once(Events.ClientReady, async () => {
   } catch (error) {
     console.error('Failed to set bot activity:', error);
   }
+
+  await serverInfo.startScheduler();
 });
 
 client.on(Events.GuildMemberAdd, async member => {
@@ -1175,6 +1186,347 @@ client.on(Events.GuildMemberAdd, async member => {
 client.on(Events.InteractionCreate, async interaction => {
   try {
     if (interaction.isChatInputCommand()) {
+      if (interaction.commandName === 'serverinfo') {
+        const canManageServer = interaction.memberPermissions?.has(
+          PermissionsBitField.Flags.ManageGuild
+        );
+
+        if (!canManageServer) {
+          await interaction.reply({
+            content: '❌ You need the **Manage Server** permission to use this command.',
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        const subcommand = interaction.options.getSubcommand();
+
+        if (subcommand === 'setup') {
+          const channel = interaction.options.getChannel('channel');
+
+          if (!channel || !channel.isTextBased()) {
+            await interaction.reply({
+              content: '❌ Please select a valid text channel.',
+              flags: MessageFlags.Ephemeral,
+            });
+            return;
+          }
+
+          const me = interaction.guild?.members?.me;
+          const missing = me
+            ? getMissingChannelPermissions(channel, me)
+            : ['Unknown'];
+
+          if (missing.length) {
+            await interaction.reply({
+              content:
+                `❌ I cannot send the server info panel to ${channel}.\n` +
+                `Missing permissions: ${missing.join(', ')}`,
+              flags: MessageFlags.Ephemeral,
+            });
+            return;
+          }
+
+          await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+          const message = await serverInfo.setupPanel({
+            guildId: interaction.guildId,
+            channel,
+          });
+
+          await interaction.editReply({
+            content:
+              `✅ Server info panel created or updated in ${channel}.\n` +
+              `[Open the server info message](${message.url})`,
+          });
+          return;
+        }
+
+        if (subcommand === 'edit') {
+          const setting = interaction.options.getString('setting', true);
+          const value = interaction.options.getString('value', true).trim();
+
+          if (!value) {
+            await interaction.reply({
+              content: '❌ The new value cannot be empty.',
+              flags: MessageFlags.Ephemeral,
+            });
+            return;
+          }
+
+          const settingMap = {
+            server_name: 'serverName',
+            ip_address: 'ipAddress',
+            game_port: 'gamePort',
+            map: 'map',
+            slots: 'slots',
+            perspective: 'perspective',
+            max_group_size: 'maxGroupSize',
+            group_size_note: 'groupSizeNote',
+            language: 'language',
+            raid_times: 'raidTimes',
+            server_region: 'serverRegion',
+            time_zone: 'timeZone',
+          };
+
+          const dataKey = settingMap[setting];
+
+          if (!dataKey) {
+            await interaction.reply({
+              content: '❌ Unknown server information setting.',
+              flags: MessageFlags.Ephemeral,
+            });
+            return;
+          }
+
+          const maximumLengths = {
+            server_name: 100,
+            ip_address: 255,
+            game_port: 5,
+            map: 100,
+            slots: 4,
+            perspective: 100,
+            max_group_size: 100,
+            group_size_note: 700,
+            language: 50,
+            raid_times: 100,
+            server_region: 100,
+            time_zone: 100,
+          };
+
+          if (value.length > maximumLengths[setting]) {
+            await interaction.reply({
+              content: `❌ This value can contain a maximum of ${maximumLengths[setting]} characters.`,
+              flags: MessageFlags.Ephemeral,
+            });
+            return;
+          }
+
+          if (setting === 'ip_address' && /\s/.test(value)) {
+            await interaction.reply({
+              content: '❌ The IP address or hostname cannot contain spaces.',
+              flags: MessageFlags.Ephemeral,
+            });
+            return;
+          }
+
+          if (setting === 'game_port') {
+            const port = Number(value);
+            if (!Number.isInteger(port) || port < 1 || port > 65535) {
+              await interaction.reply({
+                content: '❌ Please enter a valid port between 1 and 65535.',
+                flags: MessageFlags.Ephemeral,
+              });
+              return;
+            }
+          }
+
+          if (setting === 'slots') {
+            const slots = Number(value);
+            if (!Number.isInteger(slots) || slots < 1 || slots > 1000) {
+              await interaction.reply({
+                content: '❌ Please enter a valid slot count.',
+                flags: MessageFlags.Ephemeral,
+              });
+              return;
+            }
+          }
+
+          if (setting === 'time_zone' && !serverInfo.isValidTimeZone(value)) {
+            await interaction.reply({
+              content:
+                '❌ Please enter a valid IANA time zone, for example `Europe/Zurich`.',
+              flags: MessageFlags.Ephemeral,
+            });
+            return;
+          }
+
+          const data = serverInfo.getData();
+          data[dataKey] = value;
+          const saved = serverInfo.saveData(data);
+
+          if (!saved) {
+            await interaction.reply({
+              content: '❌ The server information could not be saved.',
+              flags: MessageFlags.Ephemeral,
+            });
+            return;
+          }
+
+          const refreshed = await serverInfo.refreshPanel(saved);
+
+          await interaction.reply({
+            content:
+              `✅ **${setting.replaceAll('_', ' ')}** was updated to \`${value}\`.` +
+              (refreshed
+                ? '\nThe server info panel was updated immediately.'
+                : '\nThe value was saved. Run `/serverinfo setup` to create the panel.'),
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        if (subcommand === 'links') {
+          const selectedChannels = {
+            rules: interaction.options.getChannel('rules'),
+            support: interaction.options.getChannel('support'),
+            tickets: interaction.options.getChannel('tickets'),
+            announcements: interaction.options.getChannel('announcements'),
+            status: interaction.options.getChannel('status'),
+          };
+
+          const changes = Object.entries(selectedChannels).filter(
+            ([, channel]) => channel
+          );
+
+          if (!changes.length) {
+            await interaction.reply({
+              content: '❌ Select at least one channel to update.',
+              flags: MessageFlags.Ephemeral,
+            });
+            return;
+          }
+
+          const data = serverInfo.getData();
+          for (const [key, channel] of changes) {
+            data.channels[key] = channel.id;
+          }
+
+          const saved = serverInfo.saveData(data);
+          if (!saved) {
+            await interaction.reply({
+              content: '❌ The channel links could not be saved.',
+              flags: MessageFlags.Ephemeral,
+            });
+            return;
+          }
+
+          const refreshed = await serverInfo.refreshPanel(saved);
+          const changedList = changes
+            .map(([key, channel]) => `**${key}:** ${channel}`)
+            .join('\n');
+
+          await interaction.reply({
+            content:
+              `✅ Server info channel links updated:\n${changedList}` +
+              (refreshed
+                ? '\n\nThe server info panel was updated immediately.'
+                : '\n\nRun `/serverinfo setup` to create the panel.'),
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        if (subcommand === 'features') {
+          const rawFeatures = interaction.options.getString('list', true);
+          const features = rawFeatures
+            .split('|')
+            .map(feature => feature.trim())
+            .filter(Boolean);
+
+          if (!features.length) {
+            await interaction.reply({
+              content:
+                '❌ Enter at least one feature. Separate multiple features with `|`.',
+              flags: MessageFlags.Ephemeral,
+            });
+            return;
+          }
+
+          if (features.length > 25) {
+            await interaction.reply({
+              content: '❌ A maximum of 25 features can be displayed.',
+              flags: MessageFlags.Ephemeral,
+            });
+            return;
+          }
+
+          const renderedFeatureLength = features
+            .map(feature => `• ${feature}`)
+            .join('\n').length;
+
+          if (renderedFeatureLength > 1024) {
+            await interaction.reply({
+              content:
+                '❌ The complete feature list is too long for a Discord embed. Please shorten it.',
+              flags: MessageFlags.Ephemeral,
+            });
+            return;
+          }
+
+          const data = serverInfo.getData();
+          data.features = features;
+          const saved = serverInfo.saveData(data);
+
+          if (!saved) {
+            await interaction.reply({
+              content: '❌ The features could not be saved.',
+              flags: MessageFlags.Ephemeral,
+            });
+            return;
+          }
+
+          const refreshed = await serverInfo.refreshPanel(saved);
+          await interaction.reply({
+            content:
+              `✅ Saved **${features.length}** server features.` +
+              (refreshed
+                ? '\nThe server info panel was updated immediately.'
+                : '\nRun `/serverinfo setup` to create the panel.'),
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        if (subcommand === 'restarts') {
+          const input = interaction.options.getString('times', true);
+          const restartTimes = serverInfo.normalizeRestartTimes(input);
+
+          if (!restartTimes) {
+            await interaction.reply({
+              content:
+                '❌ Use 24-hour times separated by commas, for example `00:00, 04:00, 08:00, 12:00, 16:00, 20:00`.',
+              flags: MessageFlags.Ephemeral,
+            });
+            return;
+          }
+
+          const data = serverInfo.getData();
+          data.restartTimes = restartTimes;
+          const saved = serverInfo.saveData(data);
+
+          if (!saved) {
+            await interaction.reply({
+              content: '❌ The restart times could not be saved.',
+              flags: MessageFlags.Ephemeral,
+            });
+            return;
+          }
+
+          const refreshed = await serverInfo.refreshPanel(saved);
+          await interaction.reply({
+            content:
+              `✅ Restart times updated: \`${restartTimes.join(', ')}\`` +
+              (refreshed
+                ? '\nThe local-time timestamps were refreshed immediately.'
+                : '\nRun `/serverinfo setup` to create the panel.'),
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        if (subcommand === 'refresh') {
+          const refreshed = await serverInfo.refreshPanel();
+
+          await interaction.reply({
+            content: refreshed
+              ? '✅ The server info panel and local restart timestamps were refreshed.'
+              : '❌ No saved server info panel was found. Run `/serverinfo setup` first.',
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+      }
       if (
         interaction.commandName === 'rules' ||
         interaction.commandName === 'serverrules'

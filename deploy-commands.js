@@ -5,6 +5,7 @@ const {
   Routes,
   SlashCommandBuilder,
   ChannelType,
+  PermissionFlagsBits,
 } = require('discord.js');
 
 async function deployCommands() {
@@ -140,6 +141,147 @@ async function deployCommands() {
           .setDescription('The channel where the embed should be sent')
           .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
           .setRequired(true)
+      ),
+
+    new SlashCommandBuilder()
+      .setName('serverinfo')
+      .setDescription('Create and manage the server information panel.')
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('setup')
+          .setDescription('Create the server info panel or move it to another channel.')
+          .addChannelOption(option =>
+            option
+              .setName('channel')
+              .setDescription('Channel where the server info panel should be posted')
+              .addChannelTypes(
+                ChannelType.GuildText,
+                ChannelType.GuildAnnouncement
+              )
+              .setRequired(true)
+          )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('edit')
+          .setDescription('Edit one server information value, such as the IP address.')
+          .addStringOption(option =>
+            option
+              .setName('setting')
+              .setDescription('Server information value to edit')
+              .setRequired(true)
+              .addChoices(
+                { name: 'Server Name', value: 'server_name' },
+                { name: 'IP Address', value: 'ip_address' },
+                { name: 'Game Port', value: 'game_port' },
+                { name: 'Map', value: 'map' },
+                { name: 'Slots', value: 'slots' },
+                { name: 'Perspective', value: 'perspective' },
+                { name: 'Maximum Group Size', value: 'max_group_size' },
+                { name: 'Group Size Note', value: 'group_size_note' },
+                { name: 'Language', value: 'language' },
+                { name: 'Raid Times', value: 'raid_times' },
+                { name: 'Server Region', value: 'server_region' },
+                { name: 'Time Zone', value: 'time_zone' }
+              )
+          )
+          .addStringOption(option =>
+            option
+              .setName('value')
+              .setDescription('New value')
+              .setMaxLength(1000)
+              .setRequired(true)
+          )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('links')
+          .setDescription('Update one or more channel links in the server info panel.')
+          .addChannelOption(option =>
+            option
+              .setName('rules')
+              .setDescription('Rules channel')
+              .addChannelTypes(
+                ChannelType.GuildText,
+                ChannelType.GuildAnnouncement,
+                ChannelType.GuildForum
+              )
+              .setRequired(false)
+          )
+          .addChannelOption(option =>
+            option
+              .setName('support')
+              .setDescription('Support channel')
+              .addChannelTypes(
+                ChannelType.GuildText,
+                ChannelType.GuildAnnouncement,
+                ChannelType.GuildForum
+              )
+              .setRequired(false)
+          )
+          .addChannelOption(option =>
+            option
+              .setName('tickets')
+              .setDescription('Tickets channel')
+              .addChannelTypes(
+                ChannelType.GuildText,
+                ChannelType.GuildAnnouncement,
+                ChannelType.GuildForum
+              )
+              .setRequired(false)
+          )
+          .addChannelOption(option =>
+            option
+              .setName('announcements')
+              .setDescription('Announcements channel')
+              .addChannelTypes(
+                ChannelType.GuildText,
+                ChannelType.GuildAnnouncement,
+                ChannelType.GuildForum
+              )
+              .setRequired(false)
+          )
+          .addChannelOption(option =>
+            option
+              .setName('status')
+              .setDescription('Server status channel')
+              .addChannelTypes(
+                ChannelType.GuildText,
+                ChannelType.GuildAnnouncement,
+                ChannelType.GuildForum
+              )
+              .setRequired(false)
+          )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('features')
+          .setDescription('Replace the server features list.')
+          .addStringOption(option =>
+            option
+              .setName('list')
+              .setDescription('Separate features with | characters')
+              .setMaxLength(1000)
+              .setRequired(true)
+          )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('restarts')
+          .setDescription('Change the daily server restart times.')
+          .addStringOption(option =>
+            option
+              .setName('times')
+              .setDescription('Example: 00:00, 04:00, 08:00, 12:00, 16:00, 20:00')
+              .setMaxLength(200)
+              .setRequired(true)
+          )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('refresh')
+          .setDescription('Refresh the server info panel and local restart times.')
       ),
 
     new SlashCommandBuilder()

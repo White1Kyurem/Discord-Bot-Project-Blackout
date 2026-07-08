@@ -55,3 +55,20 @@ For channels where the bot should post panels, make sure it also has permission 
 
 - The suggestion system still works without Trello, but it will only send the success message and optional log entry.
 - The status panel needs valid CFTools credentials. If they are missing, the panel shows a not-configured state instead of crashing.
+
+## Server information panel
+
+The bot includes a persistent server information panel with automatically localized restart times.
+
+### Commands
+
+- `/serverinfo setup channel:#server-info` creates the panel or posts it in a new channel.
+- `/serverinfo edit setting:IP Address value:208.115.251.67` changes a saved value and immediately edits the panel.
+- `/serverinfo links` updates the Rules, Support, Tickets, Announcements, or Server Status channel links.
+- `/serverinfo features list:Feature 1 | Feature 2 | Feature 3` replaces the features list.
+- `/serverinfo restarts times:00:00, 04:00, 08:00, 12:00, 16:00, 20:00` changes the restart schedule.
+- `/serverinfo refresh` manually refreshes the panel and its Discord timestamps.
+
+The restart schedule uses `Europe/Zurich`. Discord displays every restart timestamp in each member's own local time zone. The bot refreshes the timestamps on startup and every day at 00:05 in the configured server time zone, including daylight-saving changes.
+
+The saved configuration is stored in `data/server-info.json`. For persistent storage on a hosted deployment, point the existing `DATA_DIR` environment variable to a mounted persistent data directory.
