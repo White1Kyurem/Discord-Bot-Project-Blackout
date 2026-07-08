@@ -1,1 +1,52 @@
-
+{
+  "serverName": "Project Blackout PVP",
+  "ipAddress": "208.115.251.67",
+  "gamePort": "2491",
+  "map": "ChernarusPlus",
+  "slots": "40",
+  "perspective": "First Person Only",
+  "maxGroupSize": "4 Players",
+  "groupSizeNote": "The group limit includes all online and offline members. Alliances are not permitted.",
+  "language": "English",
+  "platform": "PC",
+  "raidTimes": "24/7",
+  "serverRegion": "Europe",
+  "timeZone": "Europe/Zurich",
+  "restartTimes": [
+    "00:00",
+    "04:00",
+    "08:00",
+    "12:00",
+    "16:00",
+    "20:00"
+  ],
+  "features": [
+    "Fast-paced PVP economy",
+    "Safezone Traders",
+    "Full-PVP Black Market",
+    "King of the Hill events",
+    "Keycard Rooms",
+    "Hacked Crate events",
+    "Airdrops",
+    "Helicopters",
+    "Custom Vehicles",
+    "BaseBuildingPlus",
+    "Custom Weapons and Equipment",
+    "Custom Locations",
+    "24/7 Raiding",
+    "Maximum group size of four players",
+    "Active Administration"
+  ],
+  "channels": {
+    "rules": "1479225004607406190",
+    "support": "1479481269942226984",
+    "tickets": "1479479331393634404",
+    "announcements": "1479495228527214724",
+    "status": ""
+  },
+  "panel": {
+    "guildId": "",
+    "channelId": "",
+    "messageId": ""
+  }
+}
