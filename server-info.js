@@ -3,50 +3,101 @@ const path = require('path');
 const { DateTime } = require('luxon');
 const { EmbedBuilder } = require('discord.js');
 
+function envString(name, fallback = '') {
+  const value = process.env[name];
+  if (typeof value !== 'string') return fallback;
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : fallback;
+}
+
+function envList(name, fallback, separatorPattern) {
+  const value = envString(name);
+  if (!value) return [...fallback];
+
+  const items = value
+    .split(separatorPattern)
+    .map(item => item.trim())
+    .filter(Boolean);
+
+  return items.length ? items : [...fallback];
+}
+
+const DEFAULT_RESTART_TIMES = [
+  '00:00',
+  '04:00',
+  '08:00',
+  '12:00',
+  '16:00',
+  '20:00',
+];
+
+const DEFAULT_FEATURES = [
+  'Fast-paced PVP economy',
+  'Safezone Traders',
+  'Full-PVP Black Market',
+  'King of the Hill events',
+  'Keycard Rooms',
+  'Hacked Crate events',
+  'Airdrops',
+  'Helicopters',
+  'Custom Vehicles',
+  'BaseBuildingPlus',
+  'Custom Weapons and Equipment',
+  'Custom Locations',
+  '24/7 Raiding',
+  'Maximum group size of four players',
+  'Active Administration',
+];
+
 const DEFAULT_SERVER_INFO = {
-  serverName: 'Project Blackout PVP',
-  ipAddress: '208.115.251.67',
-  gamePort: '2491',
-  map: 'ChernarusPlus',
-  slots: '40',
-  perspective: 'First Person Only',
-  maxGroupSize: '4 Players',
-  groupSizeNote:
-    'The group limit includes all online and offline members. Alliances are not permitted.',
-  language: 'English',
-  platform: 'PC',
-  raidTimes: '24/7',
-  serverRegion: 'Europe',
-  timeZone: 'Europe/Zurich',
-  restartTimes: ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00'],
-  features: [
-    'Fast-paced PVP economy',
-    'Safezone Traders',
-    'Full-PVP Black Market',
-    'King of the Hill events',
-    'Keycard Rooms',
-    'Hacked Crate events',
-    'Airdrops',
-    'Helicopters',
-    'Custom Vehicles',
-    'BaseBuildingPlus',
-    'Custom Weapons and Equipment',
-    'Custom Locations',
-    '24/7 Raiding',
-    'Maximum group size of four players',
-    'Active Administration',
-  ],
+  serverName: envString(
+    'DAYZ_SERVER_NAME',
+    envString('SERVER_NAME', 'Project Blackout PVP')
+  ),
+  ipAddress: envString('DAYZ_SERVER_IP', '208.115.251.67'),
+  gamePort: envString('DAYZ_SERVER_PORT', '2491'),
+  map: envString('DAYZ_SERVER_MAP', 'ChernarusPlus'),
+  slots: envString('DAYZ_SERVER_SLOTS', '40'),
+  perspective: envString('DAYZ_SERVER_PERSPECTIVE', 'First Person Only'),
+  maxGroupSize: envString('DAYZ_MAX_GROUP_SIZE', '4 Players'),
+  groupSizeNote: envString(
+    'DAYZ_GROUP_SIZE_NOTE',
+    'The group limit includes all online and offline members. Alliances are not permitted.'
+  ),
+  language: envString('DAYZ_SERVER_LANGUAGE', 'English'),
+  platform: envString('DAYZ_SERVER_PLATFORM', 'PC'),
+  raidTimes: envString('DAYZ_RAID_TIMES', '24/7'),
+  serverRegion: envString('DAYZ_SERVER_REGION', 'Europe'),
+  timeZone: envString('DAYZ_SERVER_TIME_ZONE', 'Europe/Zurich'),
+  restartTimes: envList(
+    'DAYZ_RESTART_TIMES',
+    DEFAULT_RESTART_TIMES,
+    /[;,|]+/
+  ),
+  features: envList('DAYZ_SERVER_FEATURES', DEFAULT_FEATURES, /\|+/),
   channels: {
-    rules: '1479225004607406190',
-    support: '1479481269942226984',
-    tickets: '1479479331393634404',
-    announcements: '1479495228527214724',
-    status: '',
+    rules: envString(
+      'SERVER_INFO_RULES_CHANNEL_ID',
+      envString('SERVER_RULES_CHANNEL_ID', '1479225004607406190')
+    ),
+    support: envString(
+      'SERVER_INFO_SUPPORT_CHANNEL_ID',
+      '1479481269942226984'
+    ),
+    tickets: envString(
+      'SERVER_INFO_TICKETS_CHANNEL_ID',
+      '1479479331393634404'
+    ),
+    announcements: envString(
+      'SERVER_INFO_ANNOUNCEMENTS_CHANNEL_ID',
+      '1479495228527214724'
+    ),
+    status: envString('SERVER_INFO_STATUS_CHANNEL_ID'),
   },
   panel: {
-    guildId: '',
-    channelId: '',
-    messageId: '',
+    guildId: envString('GUILD_ID'),
+    channelId: envString('SERVER_INFO_CHANNEL_ID'),
+    messageId: envString('SERVER_INFO_MESSAGE_ID'),
   },
 };
 
@@ -75,12 +126,19 @@ function mergeServerInfoData(parsed = {}) {
         ? parsed.features
         : defaults.features,
     channels: {
-      ...defaults.channels,
-      ...(parsed.channels || {}),
+      rules: safeString(parsed.channels?.rules, defaults.channels.rules),
+      support: safeString(parsed.channels?.support, defaults.channels.support),
+      tickets: safeString(parsed.channels?.tickets, defaults.channels.tickets),
+      announcements: safeString(
+        parsed.channels?.announcements,
+        defaults.channels.announcements
+      ),
+      status: safeString(parsed.channels?.status, defaults.channels.status),
     },
     panel: {
-      ...defaults.panel,
-      ...(parsed.panel || {}),
+      guildId: safeString(parsed.panel?.guildId, defaults.panel.guildId),
+      channelId: safeString(parsed.panel?.channelId, defaults.panel.channelId),
+      messageId: safeString(parsed.panel?.messageId, defaults.panel.messageId),
     },
   };
 }
@@ -379,9 +437,32 @@ function createServerInfoService({ client, dataDir, embedColor = 0x5b2a86 }) {
     ensureFile();
 
     try {
-      await refreshPanel();
+      const data = getData();
+      const refreshed = await refreshPanel(data);
+
+      // On the first start, SERVER_INFO_CHANNEL_ID can create the panel
+      // automatically. The new message ID is then stored in server-info.json.
+      if (!refreshed && safeString(data.panel?.channelId)) {
+        const channel = await client.channels
+          .fetch(data.panel.channelId)
+          .catch(() => null);
+
+        if (channel && channel.isTextBased()) {
+          const message = await setupPanel({
+            guildId: safeString(data.panel.guildId, channel.guildId || ''),
+            channel,
+          });
+          console.log(
+            `[Server Info] Panel created automatically in channel ${channel.id} (message ${message.id}).`
+          );
+        } else {
+          console.error(
+            '[Server Info] SERVER_INFO_CHANNEL_ID is configured, but the channel could not be found or is not text-based.'
+          );
+        }
+      }
     } catch (error) {
-      console.error('[Server Info] Initial refresh failed:', error);
+      console.error('[Server Info] Initial refresh/setup failed:', error);
     }
 
     scheduleNextUpdate();

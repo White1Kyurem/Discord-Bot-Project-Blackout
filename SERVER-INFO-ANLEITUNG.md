@@ -2,19 +2,35 @@
 
 Das neue System erstellt eine Server-Info-Nachricht und bearbeitet danach immer dieselbe Nachricht. Alle bestehenden Bot-Funktionen bleiben erhalten.
 
-## 1. Bot neu starten
+## 1. `.env` bzw. Railway-Variablen eintragen
+
+Die Datei `.env.example` enthält jetzt alle Einstellungen für das Server-Info-System. Für einen automatischen ersten Start sind besonders diese Werte wichtig:
+
+- `SERVER_INFO_CHANNEL_ID` – Channel, in dem das Panel erstellt wird
+- `DAYZ_SERVER_IP` und `DAYZ_SERVER_PORT`
+- `SERVER_INFO_RULES_CHANNEL_ID`
+- `SERVER_INFO_SUPPORT_CHANNEL_ID`
+- `SERVER_INFO_TICKETS_CHANNEL_ID`
+- `SERVER_INFO_ANNOUNCEMENTS_CHANNEL_ID`
+- optional `SERVER_INFO_STATUS_CHANNEL_ID`
+
+Beim ersten Start erstellt der Bot `server-info.json` aus diesen Werten. Ist `SERVER_INFO_CHANNEL_ID` eingetragen, erstellt er das Server-Info-Panel automatisch und speichert die Nachrichten-ID.
+
+Auf Railway werden diese Werte unter **Variables** eingetragen. Die Datei `.env.example` selbst enthält keine geheimen Zugangsdaten und dient nur als Vorlage.
+
+## 2. Bot neu starten
 
 Nach dem Hochladen auf GitHub/Railway den Bot neu deployen oder neu starten. Der Bot registriert die neuen Slash-Commands beim Start automatisch.
 
-## 2. Server-Info-Nachricht erstellen
+## 3. Server-Info-Nachricht erstellen
 
-In Discord ausführen:
+Wenn `SERVER_INFO_CHANNEL_ID` eingetragen ist, erstellt der Bot das Panel beim ersten Start automatisch. Alternativ kannst du es in Discord manuell erstellen oder verschieben:
 
 `/serverinfo setup channel:#server-info`
 
 Der Bot sendet das vollständige Server-Info-Embed in den ausgewählten Channel und speichert Channel- und Nachrichten-ID automatisch.
 
-## 3. IP-Adresse später ändern
+## 4. IP-Adresse später ändern
 
 `/serverinfo edit setting:IP Address value:NEUE_IP`
 
@@ -24,7 +40,7 @@ Beispiel:
 
 Die bestehende Server-Info-Nachricht wird sofort bearbeitet. Es wird keine neue Nachricht erstellt.
 
-## 4. Weitere Serverdaten ändern
+## 5. Weitere Serverdaten ändern
 
 Mit `/serverinfo edit` können folgende Werte geändert werden:
 
@@ -41,7 +57,7 @@ Mit `/serverinfo edit` können folgende Werte geändert werden:
 - Server Region
 - Time Zone
 
-## 5. Discord-Channels verlinken
+## 6. Discord-Channels verlinken
 
 `/serverinfo links`
 
@@ -55,13 +71,13 @@ Danach können einer oder mehrere dieser Channels ausgewählt werden:
 
 Bereits gespeicherte Links bleiben erhalten, wenn sie im Command nicht neu ausgewählt werden.
 
-## 6. Features ändern
+## 7. Features ändern
 
 `/serverinfo features list:Safezone Traders | Black Market | KOTH | Keyrooms`
 
 Die einzelnen Features müssen mit `|` getrennt werden.
 
-## 7. Restart-Zeiten ändern
+## 8. Restart-Zeiten ändern
 
 `/serverinfo restarts times:00:00, 04:00, 08:00, 12:00, 16:00, 20:00`
 
@@ -73,7 +89,7 @@ Der Bot aktualisiert die Zeitstempel:
 - täglich um 00:05 Uhr Schweizer Zeit
 - automatisch bei Sommer- und Winterzeit
 
-## 8. Manuell aktualisieren
+## 9. Manuell aktualisieren
 
 `/serverinfo refresh`
 
