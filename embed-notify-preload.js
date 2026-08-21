@@ -15,6 +15,8 @@ const {
 const NOTIFY_MODAL_PREFIX = 'custom_embed_notify_modal_';
 const DEFAULT_EMBED_COLOR = 0x5b2a86;
 const DEFAULT_HEX_COLOR = '#5B2A86';
+const PLAYER_NOTIFY_ROLE_ID =
+  process.env.EMBED_NOTIFY_ROLE_ID || '1479390268921741343';
 const PATCH_FLAG = Symbol.for('project-blackout.embed-notify-preload');
 
 function safeString(value, fallback = '') {
@@ -87,11 +89,27 @@ function buildNotifyEmbedModal(channelId, notifyPlayers) {
   return modal;
 }
 
-function getMissingPermissions(channel, me, notifyPlayers) {
+async function getPlayerNotifyRole(guild) {
+  if (!guild || !PLAYER_NOTIFY_ROLE_ID) return null;
+
+  return guild.roles.fetch(PLAYER_NOTIFY_ROLE_ID).catch(() => null);
+}
+
+function getMissingPermissions(
+  channel,
+  me,
+  notifyPlayers,
+  notifyRoleMentionable = false
+) {
   const perms = channel.permissionsFor(me);
   if (!perms) {
     return notifyPlayers
-      ? ['ViewChannel', 'SendMessages', 'EmbedLinks', 'MentionEveryone']
+      ? [
+          'ViewChannel',
+          'SendMessages',
+          'EmbedLinks',
+          'Mention @everyone, @here, and All Roles',
+        ]
       : ['ViewChannel', 'SendMessages', 'EmbedLinks'];
   }
 
@@ -111,9 +129,10 @@ function getMissingPermissions(channel, me, notifyPlayers) {
 
   if (
     notifyPlayers &&
+    !notifyRoleMentionable &&
     !perms.has(PermissionsBitField.Flags.MentionEveryone)
   ) {
-    missing.push('MentionEveryone');
+    missing.push('Mention @everyone, @here, and All Roles');
   }
 
   return missing;
@@ -149,9 +168,28 @@ async function handleEmbedPanelInteraction(interaction) {
       return true;
     }
 
+    const notifyRole = notifyPlayers
+      ? await getPlayerNotifyRole(interaction.guild)
+      : null;
+
+    if (notifyPlayers && !notifyRole) {
+      await interaction.reply({
+        content:
+          `❌ The configured player notification role could not be found.\n` +
+          `Role ID: ${PLAYER_NOTIFY_ROLE_ID}`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return true;
+    }
+
     const me = interaction.guild?.members?.me;
     const missing = me
-      ? getMissingPermissions(channel, me, notifyPlayers)
+      ? getMissingPermissions(
+          channel,
+          me,
+          notifyPlayers,
+          notifyRole?.mentionable ?? false
+        )
       : ['Unknown'];
 
     if (missing.length) {
@@ -191,9 +229,28 @@ async function handleEmbedPanelInteraction(interaction) {
       return true;
     }
 
+    const notifyRole = notifyPlayers
+      ? await getPlayerNotifyRole(interaction.guild)
+      : null;
+
+    if (notifyPlayers && !notifyRole) {
+      await interaction.reply({
+        content:
+          `❌ The configured player notification role could not be found.\n` +
+          `Role ID: ${PLAYER_NOTIFY_ROLE_ID}`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return true;
+    }
+
     const me = interaction.guild?.members?.me;
     const missing = me
-      ? getMissingPermissions(channel, me, notifyPlayers)
+      ? getMissingPermissions(
+          channel,
+          me,
+          notifyPlayers,
+          notifyRole?.mentionable ?? false
+        )
       : ['Unknown'];
 
     if (missing.length) {
@@ -241,8 +298,11 @@ async function handleEmbedPanelInteraction(interaction) {
     const messagePayload = { embeds: [embed] };
 
     if (notifyPlayers) {
-      messagePayload.content = '@everyone';
-      messagePayload.allowedMentions = { parse: ['everyone'] };
+      messagePayload.content = `<@&${PLAYER_NOTIFY_ROLE_ID}>`;
+      messagePayload.allowedMentions = {
+        parse: [],
+        roles: [PLAYER_NOTIFY_ROLE_ID],
+      };
     }
 
     await channel.send(messagePayload);
@@ -250,7 +310,10 @@ async function handleEmbedPanelInteraction(interaction) {
     await interaction.reply({
       content:
         `✅ Custom embed sent to ${channel}.\n` +
-        `🔔 Player notification: **${notifyPlayers ? 'Enabled (@everyone)' : 'Disabled'}**`,
+        `🔔 Player notification: **${
+          notifyPlayers ? `Enabled (<@&${PLAYER_NOTIFY_ROLE_ID}>)` : 'Disabled'
+        }**`,
+      allowedMentions: { parse: [] },
       flags: MessageFlags.Ephemeral,
     });
 
@@ -277,7 +340,7 @@ if (!globalThis[PATCH_FLAG]) {
         {
           type: ApplicationCommandOptionType.Boolean,
           name: 'notify_players',
-          description: 'Ping @everyone when the embed is sent',
+          description: 'Ping the configured player role when the embed is sent',
           required: false,
         },
       ];
