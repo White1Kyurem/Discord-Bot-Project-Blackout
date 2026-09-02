@@ -23,6 +23,7 @@ const {
 
 const { deployCommands } = require('./deploy-commands');
 const { createServerInfoService } = require('./server-info');
+const { createOfficialRulesService } = require('./official-rules');
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
@@ -83,6 +84,13 @@ const serverInfo = createServerInfoService({
   client,
   dataDir: DATA_DIR,
   embedColor: EMBED_COLOR,
+});
+
+const officialRulesService = createOfficialRulesService({
+  client,
+  dataDir: DATA_DIR,
+  embedColor: EMBED_COLOR,
+  serverName: CONFIG.serverName,
 });
 
 const PANEL_BUTTON_ID = 'open_suggestion_modal';
@@ -1188,6 +1196,11 @@ client.on(Events.InteractionCreate, async interaction => {
     if (interaction.isChatInputCommand()) {
       if (interaction.commandName === 'serverinfo') {
         await serverInfo.handleCommand(interaction);
+        return;
+      }
+
+      if (interaction.commandName === 'publishrules') {
+        await officialRulesService.handleCommand(interaction);
         return;
       }
 
