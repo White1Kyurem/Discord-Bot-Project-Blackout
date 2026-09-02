@@ -35,6 +35,21 @@ async function deployCommands() {
       .setDescription('Show the default server rules.'),
 
     new SlashCommandBuilder()
+      .setName('publishrules')
+      .setDescription('Create or update all official rules panels in one channel.')
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+      .addChannelOption(option =>
+        option
+          .setName('channel')
+          .setDescription('Channel where all official rules panels should be published')
+          .addChannelTypes(
+            ChannelType.GuildText,
+            ChannelType.GuildAnnouncement
+          )
+          .setRequired(true)
+      ),
+
+    new SlashCommandBuilder()
       .setName('sendrulespanels')
       .setDescription('Send all saved rules panels to their assigned channels.'),
 

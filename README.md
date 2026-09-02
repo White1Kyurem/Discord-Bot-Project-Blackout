@@ -5,7 +5,8 @@ A clean rewrite of the bot with all user-facing text in English.
 ## Features
 
 - `/rules` to show the current rules
-- `/rulespanel` to post the rules in a selected channel
+- `/rulespanel` to post an individual custom rules panel
+- `/publishrules channel:#rules` to create or update all 15 official rules panels at once
 - `/setrules` to update the saved rules text
 - `/ticketpanel` to post a suggestion panel in a selected channel
 - `/suggestion` to open the suggestion form directly
@@ -55,6 +56,14 @@ For channels where the bot should post panels, make sure it also has permission 
 
 - The suggestion system still works without Trello, but it will only send the success message and optional log entry.
 - The status panel needs valid CFTools credentials. If they are missing, the panel shows a not-configured state instead of crashing.
+
+## Official rules panels
+
+Run `/publishrules channel:#rules` once and select your rules channel. The bot posts all 15 official Project Blackout rule panels in the correct order.
+
+Running the same command again edits the existing bot messages instead of creating duplicates. Deleted panels are recreated automatically. Message IDs are stored in `official-rules-panels.json` inside `DATA_DIR`, so Railway should use the persistent `/data` volume.
+
+Only members with the **Manage Server** permission can use this command.
 
 ## Server information panel
 
