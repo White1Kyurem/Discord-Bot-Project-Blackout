@@ -1,0 +1,77 @@
+[
+  {
+    "key": "general",
+    "title": "📜 General Rules",
+    "description": "• Treat all players and staff members with respect.\n• Harassment, discrimination, hate speech, real-life threats, doxxing, and targeted personal attacks are prohibited.\n• Offensive player names, group names, signs, or other visible content are not allowed.\n• Do not impersonate staff members or falsely represent Project Blackout.\n• Follow all reasonable staff instructions.\n• False reports, fabricated evidence, and deliberately misleading staff are prohibited.\n• Staff decisions must not be argued about publicly. Use a support ticket if you disagree."
+  },
+  {
+    "key": "pvp",
+    "title": "⚔️ PvP Rules",
+    "description": "• PvP and kill-on-sight are allowed everywhere outside designated Safezones.\n• Combat logging is strictly prohibited.\n• Disconnecting to avoid death, escape combat, protect loot, or gain an advantage is considered combat logging.\n• If your game crashes during combat, reconnect as quickly as possible.\n• Stream sniping and using another player’s broadcast to gain information are prohibited.\n• Do not abuse relogging, restarts, animations, render issues, or glitches during combat.\n• Logging into another account to gain a combat advantage is prohibited."
+  },
+  {
+    "key": "raiding",
+    "title": "💥 Raiding Rules",
+    "description": "• Raiding is allowed 24/7.\n• Only intended raiding mechanics and approved raid tools may be used.\n• Glitching, clipping, relogging, or abusing animations to enter a base is prohibited.\n• Vehicles and deployable objects must not be used to bypass base defences.\n• Logging out inside an enemy base to raid or attack later is considered ghosting.\n• Raiders may take useful loot and destroy structures required to access it.\n• Deliberately destroying, despawning, dumping, or hiding loot without a valid raiding purpose is considered griefing.\n• Do not replace enemy locks, permanently block entrances, or claim a raided base.\n• Every raid must follow the Raid Recording Requirements."
+  },
+  {
+    "key": "raid-recording",
+    "title": "🎥 Raid Recording Requirements",
+    "description": "• Every raid must be recorded by at least one member of the attacking group.\n• The recording must cover the raid from before the first raid action until the group has finished and left the area.\n• It must clearly show the location, entry method, destroyed raid points, and important actions inside the base.\n• The original and continuous footage must be kept. Edited or incomplete footage may be rejected.\n• Automatic recording splits are accepted if no part of the raid is missing.\n• Raid footage must only be submitted when requested by staff.\n• Failure to provide valid footage may cause the raid to be treated as illegal.\n• Hiding, deleting, or editing footage to conceal a violation will result in additional punishment."
+  },
+  {
+    "key": "base-building",
+    "title": "🏗️ Base Building Rules",
+    "description": "• Maximum base size: **4 × 4 × 4** — width × length × height.\n• Connected garages, towers, extensions, and storage areas count as part of the same base.\n• A maximum of **10 locked access points** is allowed per base.\n• This includes doors, gates, garage doors, roof hatches, and floor hatches.\n• Bases must remain raidable through intended game mechanics.\n• Unraidable, floating, overlapping, stacked, or exploit-based structures are prohibited.\n• Multiple territories must not be used to bypass the size or door limit.\n• Base structures must not clip into terrain or map objects in a way that prevents raiding.\n• Illegal bases may be modified or removed without compensation."
+  },
+  {
+    "key": "restricted-building",
+    "title": "🚫 Restricted Building Areas",
+    "description": "Building is prohibited in or directly around:\n\n• Military zones\n• Safezones and trader areas\n• Keyrooms and their entrances\n• Event locations and event objectives\n• Permanent toxic zones\n• Important custom locations\n• Main roads and bridges\n• Water pumps and coastal spawn routes\n• Underground entrances, tunnels, and important access points\n\nBases that block important locations or server content may be removed without compensation. Open a support ticket before building if you are unsure about a location."
+  },
+  {
+    "key": "groups",
+    "title": "👥 Group Rules",
+    "description": "• The maximum group size is **four players**, including online and offline members.\n• Rotating additional players into the group to bypass the limit is prohibited.\n• Alliances and temporary teaming between separate groups are prohibited.\n• Separate groups may not share bases, storage, vehicles, Code Locks, raid supplies, or group markers.\n• Groups may trade, but trading must not become regular coordinated cooperation.\n• Multiple groups may independently attack the same location, but they must not communicate, coordinate, or deliberately avoid fighting each other.\n• Players who knowingly assist an oversized group may also be punished."
+  },
+  {
+    "key": "safezone-trader",
+    "title": "🛡️ Safezone & Trader Rules",
+    "description": "• Do not attack, damage, trap, restrain, or push players inside Safezones.\n• Stealing items or vehicles inside Safezones is prohibited.\n• Do not enter, move, unlock, or interfere with another player’s vehicle.\n• Do not block traders, garages, ATMs, parking areas, roads, entrances, or exits.\n• Shooting into a Safezone from outside is prohibited.\n• Do not repeatedly cross the Safezone boundary to abuse its protection.\n• Scouting players from inside a Safezone for teammates waiting outside is prohibited.\n• Trolling, mic spam, vehicle ramming, and deliberate obstruction are prohibited.\n• The **Black Market is a full-PvP area** and is not protected by Safezone rules."
+  },
+  {
+    "key": "vehicles-helicopters",
+    "title": "🚗 Vehicle & Helicopter Rules",
+    "description": "• Vehicles and helicopters must not be used to enter bases through glitches or bypass raid defences.\n• Do not intentionally block roads, traders, events, keyrooms, or base entrances with vehicles.\n• Vehicle ramming and trolling inside Safezones are prohibited.\n• Do not abuse desynchronisation, physics bugs, seat switching, or relogging for an unfair advantage.\n• Aircraft must not be used to access restricted or unintended locations.\n• Glitched, inaccessible, abandoned, or obstructive vehicles may be moved or deleted by staff.\n• Compensation is not guaranteed for reckless driving, poor parking, or normal DayZ vehicle issues."
+  },
+  {
+    "key": "keyrooms-events",
+    "title": "🗝️ Keyrooms & Events",
+    "description": "• KOTH, airdrops, hacked crates, keyrooms, and other events are PvP areas unless stated otherwise.\n• Fighting, ambushing, and contesting event objectives are allowed.\n• Separate groups may contest the same event but may not cooperate.\n• Do not block objectives, containers, doors, or access points with vehicles or deployable objects.\n• Keyrooms may only be entered through their intended access method.\n• Glitching through keyroom doors, walls, roofs, or floors is prohibited.\n• Logging out inside a keyroom or restricted event structure is prohibited.\n• Do not remain inside a keyroom to bypass its closing system.\n• Bugs involving doors, keycards, crates, timers, or rewards must be reported and not abused."
+  },
+  {
+    "key": "cheating-exploits",
+    "title": "🚨 Cheating & Exploits",
+    "description": "• Cheats, hacks, scripts, unauthorised macros, and third-party tools are prohibited.\n• Modifying game files to gain an unfair advantage is prohibited.\n• Duplicating items, currency, vehicles, or equipment is prohibited.\n• Knowingly using, storing, trading, or distributing duplicated items is also prohibited.\n• Bug abuse and exploiting unintended mechanics are prohibited.\n• Serious exploits must be reported privately and must not be shared publicly.\n• If an exploit is triggered accidentally, stop using it and report it immediately.\n• Claiming that an exploit was only being tested is not a defence without prior staff permission."
+  },
+  {
+    "key": "alternate-accounts",
+    "title": "👤 Alternate Accounts",
+    "description": "• Alternate accounts must not be used to bypass bans, group limits, raid rules, or other restrictions.\n• Alternate accounts must not provide additional storage, hidden raid positions, enemy-base access, or combat advantages.\n• Do not use another account to scout locations, watch a base, protect loot, or participate in the same fight.\n• Helping another player evade a ban is prohibited.\n• Sharing an account with a banned player may result in punishment."
+  },
+  {
+    "key": "reports-support",
+    "title": "🎫 Reports & Support",
+    "description": "• Use the designated Discord ticket channels for reports, compensation requests, and appeals.\n• Include all available evidence, such as videos, screenshots, timestamps, names, and locations.\n• Evidence must show enough context for staff to understand the incident.\n• Do not edit or crop evidence in a misleading way.\n• Do not post reports publicly or encourage harassment against another player.\n• Do not repeatedly contact staff through private messages.\n• Compensation is only granted when the loss and its cause can be reasonably verified.\n• Abusing the ticket system or knowingly submitting false reports may result in punishment."
+  },
+  {
+    "key": "punishments",
+    "title": "🔨 Punishments",
+    "description": "Depending on the violation, punishment may include:\n\n• Warning\n• Removal from an event or location\n• Removal of items, currency, or vehicles\n• Base modification or removal\n• Character or inventory wipe\n• Temporary ban\n• Permanent ban\n\nSevere violations such as cheating, deliberate duplication, ban evasion, doxxing, or real-life threats may result in an immediate permanent ban.\n\nGroups may be punished together when members knowingly participate in, assist with, benefit from, or conceal a violation."
+  },
+  {
+    "key": "final-information",
+    "title": "📌 Final Information",
+    "description": "• By playing on Project Blackout PvP, you agree to follow all server rules.\n• Ignorance of the rules is not an excuse.\n• Finding a loophole in the wording does not make an exploit or unfair action acceptable.\n• If you are unsure whether something is allowed, open a support ticket before doing it.\n• Rules may be updated when necessary. Important changes will be announced on Discord.\n• Players are responsible for keeping themselves informed about the current rules.\n\n**Play fair, respect the community, and enjoy Project Blackout PvP!**"
+  }
+]
