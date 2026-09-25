@@ -63,6 +63,8 @@ Run `/publishrules channel:#rules` once and select your rules channel. The bot p
 
 Running the same command again edits the existing bot messages instead of creating duplicates. Deleted panels are recreated automatically. Message IDs are stored in `official-rules-panels.json` inside `DATA_DIR`, so Railway should use the persistent `/data` volume.
 
+After the rules channel has been configured once, the bot automatically synchronizes all official rules panels whenever it starts. `SERVER_RULES_CHANNEL_ID` is used as a fallback when no saved channel exists yet.
+
 Only members with the **Manage Server** permission can use this command.
 
 ## Server information panel
@@ -79,4 +81,3 @@ The existing bot functions remain unchanged. The additional `/serverinfo` comman
 Restart times use `Europe/Zurich` by default and are rendered as Discord timestamps, so each member sees them in their own local time zone. The bot refreshes the timestamps on startup and daily at 00:05 in the configured server time zone.
 
 The configuration is stored in `data/server-info.json`, or inside the directory configured through `DATA_DIR`.
-
