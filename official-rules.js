@@ -202,6 +202,28 @@ function createOfficialRulesService({
     }
   }
 
+  async function syncConfiguredChannel(fallbackChannelId = '') {
+    const savedState = getState();
+    const channelId = savedState.channelId || fallbackChannelId;
+
+    if (!channelId) {
+      console.log(
+        'Official rules auto-sync skipped: no rules channel has been configured.'
+      );
+      return null;
+    }
+
+    const channel = await client.channels.fetch(channelId).catch(() => null);
+
+    if (!channel || !channel.isTextBased() || !channel.guild) {
+      throw new Error(
+        `The configured rules channel (${channelId}) could not be loaded.`
+      );
+    }
+
+    return sync(channel);
+  }
+
   async function handleCommand(interaction) {
     const channel = interaction.options.getChannel('channel');
 
@@ -240,6 +262,7 @@ function createOfficialRulesService({
   return {
     handleCommand,
     sync,
+    syncConfiguredChannel,
   };
 }
 
