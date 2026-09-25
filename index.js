@@ -1175,6 +1175,20 @@ client.once(Events.ClientReady, async () => {
     console.error('Failed to set bot activity:', error);
   }
 
+  try {
+    const result = await officialRulesService.syncConfiguredChannel(
+      CONFIG.serverRulesChannelId
+    );
+
+    if (result) {
+      console.log(
+        `Official rules auto-synced: ${result.updated} updated, ${result.created} created.`
+      );
+    }
+  } catch (error) {
+    console.error('Official rules auto-sync failed:', error);
+  }
+
   await serverInfo.startScheduler();
 });
 
