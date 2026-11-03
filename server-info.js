@@ -91,6 +91,11 @@ function createDefaultServerInfo() {
       /[;,|]+/
     ),
     features: envList('DAYZ_SERVER_FEATURES', DEFAULT_FEATURES, /\|+/),
+    voteUrl: envString('SERVER_VOTE_URL'),
+    voteButtonLabel: envString(
+      'SERVER_VOTE_BUTTON_LABEL',
+      'Vote for Project Blackout'
+    ),
     channels: {
       rules: envString(
         'SERVER_INFO_RULES_CHANNEL_ID',
@@ -132,6 +137,11 @@ function mergeServerInfoData(parsed = {}) {
       Array.isArray(parsed.features) && parsed.features.length
         ? parsed.features
         : defaults.features,
+    voteUrl: safeString(parsed.voteUrl, defaults.voteUrl),
+    voteButtonLabel: safeString(
+      parsed.voteButtonLabel,
+      defaults.voteButtonLabel
+    ),
     channels: {
       rules: safeString(parsed.channels?.rules, defaults.channels.rules),
       support: safeString(parsed.channels?.support, defaults.channels.support),
@@ -148,6 +158,18 @@ function mergeServerInfoData(parsed = {}) {
       messageId: safeString(parsed.panel?.messageId, defaults.panel.messageId),
     },
   };
+}
+
+function isValidExternalUrl(value) {
+  const normalized = safeString(value);
+  if (!normalized) return false;
+
+  try {
+    const parsed = new URL(normalized);
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+  } catch {
+    return false;
+  }
 }
 
 function createServerInfoService({ client, dataDir, embedColor = 0x5b2a86 }) {
@@ -391,31 +413,53 @@ function createServerInfoService({ client, dataDir, embedColor = 0x5b2a86 }) {
   }
 
   function buildComponents(data = getData()) {
+    const rows = [];
     const guildId = safeString(data.panel?.guildId);
-    if (!guildId) return [];
 
-    const definitions = [
-      ['Rules', '📜', data.channels?.rules],
-      ['Support', '🛟', data.channels?.support],
-      ['Tickets', '🎫', data.channels?.tickets],
-      ['Announcements', '📢', data.channels?.announcements],
-      ['Server Status', '📡', data.channels?.status],
-    ];
+    if (guildId) {
+      const definitions = [
+        ['Rules', '📜', data.channels?.rules],
+        ['Support', '🛟', data.channels?.support],
+        ['Tickets', '🎫', data.channels?.tickets],
+        ['Announcements', '📢', data.channels?.announcements],
+        ['Server Status', '📡', data.channels?.status],
+      ];
 
-    const buttons = definitions
-      .filter(([, , channelId]) => safeString(channelId))
-      .slice(0, 5)
-      .map(([label, emoji, channelId]) =>
-        new ButtonBuilder()
-          .setLabel(label)
-          .setEmoji(emoji)
-          .setStyle(ButtonStyle.Link)
-          .setURL(`https://discord.com/channels/${guildId}/${channelId}`)
+      const channelButtons = definitions
+        .filter(([, , channelId]) => safeString(channelId))
+        .slice(0, 5)
+        .map(([label, emoji, channelId]) =>
+          new ButtonBuilder()
+            .setLabel(label)
+            .setEmoji(emoji)
+            .setStyle(ButtonStyle.Link)
+            .setURL(`https://discord.com/channels/${guildId}/${channelId}`)
+        );
+
+      if (channelButtons.length) {
+        rows.push(new ActionRowBuilder().addComponents(channelButtons));
+      }
+    }
+
+    const voteUrl = safeString(data.voteUrl);
+    if (isValidExternalUrl(voteUrl)) {
+      const voteButtonLabel = safeString(
+        data.voteButtonLabel,
+        'Vote for Project Blackout'
+      ).slice(0, 80);
+
+      rows.push(
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setLabel(voteButtonLabel)
+            .setEmoji('🗳️')
+            .setStyle(ButtonStyle.Link)
+            .setURL(voteUrl)
+        )
       );
+    }
 
-    if (!buttons.length) return [];
-
-    return [new ActionRowBuilder().addComponents(buttons)];
+    return rows;
   }
 
   function buildMessagePayload(data = getData()) {
@@ -787,6 +831,49 @@ function createServerInfoService({ client, dataDir, embedColor = 0x5b2a86 }) {
           (refreshed
             ? '\n\nThe server info panel was updated immediately.'
             : '\n\nRun `/serverinfo setup` to create the panel.'),
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    if (subcommand === 'vote') {
+      const voteUrl = interaction.options.getString('url', true).trim();
+      const requestedLabel = safeString(
+        interaction.options.getString('label')
+      );
+
+      if (!isValidExternalUrl(voteUrl)) {
+        await interaction.reply({
+          content:
+            '❌ Please enter a complete external URL beginning with `https://` or `http://`.',
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      const data = getData();
+      data.voteUrl = voteUrl;
+
+      if (requestedLabel) {
+        data.voteButtonLabel = requestedLabel.slice(0, 80);
+      }
+
+      const saved = saveData(data);
+      if (!saved) {
+        await interaction.reply({
+          content: '❌ The vote link could not be saved.',
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      const refreshed = await refreshPanel(saved);
+      await interaction.reply({
+        content:
+          `✅ Vote button updated: [Open vote page](${voteUrl})` +
+          (refreshed
+            ? '\nThe server info panel was updated immediately.'
+            : '\nRun `/serverinfo setup` to create the panel.'),
         flags: MessageFlags.Ephemeral,
       });
       return;

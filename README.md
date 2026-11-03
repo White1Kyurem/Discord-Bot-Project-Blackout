@@ -74,6 +74,7 @@ The existing bot functions remain unchanged. The additional `/serverinfo` comman
 - `/serverinfo setup channel:#server-info` creates or updates the panel.
 - `/serverinfo edit setting:IP Address value:208.115.251.67` changes a saved value.
 - `/serverinfo links` updates the linked Discord channels.
+- `/serverinfo vote url:https://...` adds or updates the external voting-page button.
 - `/serverinfo features` replaces the feature list.
 - `/serverinfo restarts` changes the daily restart times.
 - `/serverinfo refresh` refreshes the panel manually.
