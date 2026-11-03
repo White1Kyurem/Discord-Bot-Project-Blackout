@@ -38,6 +38,23 @@ Weitere bearbeitbare Werte sind Servername, Port, Map, Slots, Perspektive, Grupp
 
 Es müssen nicht alle Optionen gleichzeitig angegeben werden.
 
+## Externen Vote-Button einrichten
+
+Trage den vollständigen Link zur Vote-Seite direkt in Discord ein:
+
+```text
+/serverinfo vote url:https://DEINE-VOTE-SEITE.example/project-blackout label:Vote for Project Blackout
+```
+
+Der Bot speichert den Link dauerhaft und ergänzt unter dem Server-Info-Panel eine eigene Button-Zeile. Wenn das Panel bereits existiert, wird es sofort aktualisiert. Der Button öffnet die externe Vote-Seite im Browser.
+
+Alternativ kannst du den Link beim ersten Start über Railway setzen:
+
+```env
+SERVER_VOTE_URL=https://DEINE-VOTE-SEITE.example/project-blackout
+SERVER_VOTE_BUTTON_LABEL=Vote for Project Blackout
+```
+
 ## Features ändern
 
 ```text
