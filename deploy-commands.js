@@ -272,6 +272,25 @@ async function deployCommands() {
       )
       .addSubcommand(subcommand =>
         subcommand
+          .setName('vote')
+          .setDescription('Add or update the external server vote button.')
+          .addStringOption(option =>
+            option
+              .setName('url')
+              .setDescription('Complete external voting page URL')
+              .setMaxLength(500)
+              .setRequired(true)
+          )
+          .addStringOption(option =>
+            option
+              .setName('label')
+              .setDescription('Optional button text')
+              .setMaxLength(80)
+              .setRequired(false)
+          )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
           .setName('features')
           .setDescription('Replace the server feature list.')
           .addStringOption(option =>
